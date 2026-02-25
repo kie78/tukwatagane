@@ -447,13 +447,14 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           },
                         );
                       },
+                      color: Color(0xFFF57C00),
                       hasBorder: true,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _buildActionButton(
-                      icon: Icons.close,
+                      icon: Icons.delete_forever,
                       label: 'Purge',
                       onTap: () {
                         _showConfirmationDialog(
@@ -467,6 +468,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           },
                         );
                       },
+                      color: Color(0xFFB71C1C),
                       hasBorder: true,
                     ),
                   ),
@@ -486,7 +488,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                         child: Text(
                           'DELETED',
                           style: TextStyle(
-                            color: Colors.red.shade700,
+                            color: Color(0xFFD32F2F),
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -519,6 +521,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           ),
                         );
                       },
+                      color: Color(0xFF1976D2),
                       isDisabled: item.status == ListingStatus.sold,
                       hasBorder: true,
                     ),
@@ -542,6 +545,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                                 },
                               );
                             },
+                      color: Color(0xFFD32F2F),
                       isDisabled: item.status == ListingStatus.sold,
                       hasBorder: true,
                     ),
@@ -564,6 +568,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                             },
                           );
                         },
+                        color: Color(0xFF2E7D32),
                         hasBorder: true,
                       ),
                     ),
@@ -578,8 +583,8 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: item.status == ListingStatus.active
-                            ? AppColors.lightGray
-                            : AppColors.lightGray,
+                            ? Color(0xFFE8F5E9)
+                            : Color(0xFFF5F5F5),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Center(
@@ -588,7 +593,9 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                               ? 'ACTIVE'
                               : 'SOLD',
                           style: TextStyle(
-                            color: AppColors.teal,
+                            color: item.status == ListingStatus.active
+                                ? Color(0xFF2E7D32)
+                                : AppColors.mediumGray,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -608,9 +615,12 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     required IconData icon,
     required String label,
     required VoidCallback? onTap,
+    required Color color,
     bool isDisabled = false,
     bool hasBorder = false,
   }) {
+    final effectiveColor = isDisabled ? AppColors.mediumGray.withOpacity(0.4) : color;
+    
     return GestureDetector(
       onTap: isDisabled ? null : onTap,
       child: Container(
@@ -624,7 +634,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                 border: Border.all(
                   color: isDisabled
                       ? AppColors.lightGray
-                      : AppColors.mediumGray.withOpacity(0.3),
+                      : effectiveColor.withOpacity(0.5),
                   width: 1,
                 ),
                 borderRadius: BorderRadius.circular(6),
@@ -637,19 +647,16 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
             Icon(
               icon,
               size: 16,
-              color: isDisabled
-                  ? AppColors.mediumGray.withOpacity(0.4)
-                  : AppColors.mediumGray,
+              color: effectiveColor,
             ),
             const SizedBox(width: 4),
             Flexible(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: isDisabled
-                      ? AppColors.mediumGray.withOpacity(0.4)
-                      : AppColors.mediumGray,
+                  color: effectiveColor,
                   fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
