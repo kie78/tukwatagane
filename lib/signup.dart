@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'main.dart';
-import 'browse.dart';
+import 'accountAuth.dart';
 import 'login.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -17,10 +17,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _alternateLocationController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  bool _isPasswordVisible = false;
-  bool _isConfirmPasswordVisible = false;
   bool _useCurrentLocation = false;
   String? _currentLocationText;
   bool _isLoadingLocation = false;
@@ -32,8 +28,6 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _alternateLocationController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -145,40 +139,43 @@ class _SignupScreenState extends State<SignupScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                // Back Button
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.lightGray,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.mediumGray.withOpacity(0.3),
-                        width: 1,
+                // Back Button and Heading
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.lightGray,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.mediumGray.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.arrow_back,
+                          color: AppColors.darkGray,
+                          size: 20,
+                        ),
                       ),
                     ),
-                    child: Icon(
-                      Icons.arrow_back,
-                      color: AppColors.darkGray,
-                      size: 20,
+                    const SizedBox(width: 16),
+                    Text(
+                      'Create Account',
+                      style: TextStyle(
+                        color: AppColors.darkGray,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 32),
-                // Main Heading
-                Text(
-                  'Create Account',
-                  style: TextStyle(
-                    color: AppColors.darkGray,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
                 // Subtext
                 Text(
                   'Join our student marketplace to start trading.',
@@ -187,6 +184,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     fontSize: 16,
                   ),
                 ),
+                const SizedBox(height: 24),
+                // Stepper
+                _buildStepper(currentStep: 0),
                 const SizedBox(height: 40),
                 // Full Name Field
                 _buildInputField(
@@ -226,30 +226,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 20),
                 // Location Section
                 _buildLocationSection(),
-                const SizedBox(height: 20),
-                // Password Field
-                _buildPasswordField(
-                  label: 'Password',
-                  controller: _passwordController,
-                  isPasswordVisible: _isPasswordVisible,
-                  onToggleVisibility: () {
-                    setState(() {
-                      _isPasswordVisible = !_isPasswordVisible;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                // Confirm Password Field
-                _buildPasswordField(
-                  label: 'Confirm Password',
-                  controller: _confirmPasswordController,
-                  isPasswordVisible: _isConfirmPasswordVisible,
-                  onToggleVisibility: () {
-                    setState(() {
-                      _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
-                    });
-                  },
-                ),
                 const SizedBox(height: 40),
                 // Submit Button
                 SizedBox(
@@ -257,10 +233,12 @@ class _SignupScreenState extends State<SignupScreen> {
                   height: 56,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pushReplacement(
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const BrowseScreen(),
+                          builder: (context) => AccountAuthScreen(
+                            email: _emailController.text,
+                          ),
                         ),
                       );
                     },
@@ -386,66 +364,130 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildPasswordField({
-    required String label,
-    required TextEditingController controller,
-    required bool isPasswordVisible,
-    required VoidCallback onToggleVisibility,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildStepper({required int currentStep}) {
+    return Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.darkGray,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: currentStep >= 0 ? AppColors.teal : AppColors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: currentStep >= 0 ? AppColors.teal : AppColors.mediumGray,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '1',
+                    style: TextStyle(
+                      color: currentStep >= 0 ? AppColors.white : AppColors.mediumGray,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Details',
+                style: TextStyle(
+                  color: currentStep >= 0 ? AppColors.teal : AppColors.mediumGray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          obscureText: !isPasswordVisible,
-          decoration: InputDecoration(
-            hintText: '........',
-            hintStyle: TextStyle(
-              color: AppColors.lightGray,
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                isPasswordVisible
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: AppColors.mediumGray,
+        Expanded(
+          child: Container(
+            height: 2,
+            color: currentStep >= 1 ? AppColors.teal : AppColors.white,
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: currentStep >= 1 ? AppColors.teal : AppColors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: currentStep >= 1 ? AppColors.teal : AppColors.mediumGray,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '2',
+                    style: TextStyle(
+                      color: currentStep >= 1 ? AppColors.white : AppColors.mediumGray,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               ),
-              onPressed: onToggleVisibility,
-            ),
-            filled: true,
-            fillColor: AppColors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: AppColors.lightGray,
+              const SizedBox(height: 8),
+              Text(
+                'Verify',
+                style: TextStyle(
+                  color: currentStep >= 1 ? AppColors.teal : AppColors.mediumGray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: AppColors.lightGray,
+            ],
+          ),
+        ),
+        Expanded(
+          child: Container(
+            height: 2,
+            color: currentStep >= 2 ? AppColors.teal : AppColors.white,
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: currentStep >= 2 ? AppColors.teal : AppColors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: currentStep >= 2 ? AppColors.teal : AppColors.mediumGray,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '3',
+                    style: TextStyle(
+                      color: currentStep >= 2 ? AppColors.white : AppColors.mediumGray,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: AppColors.teal,
-                width: 2,
+              const SizedBox(height: 8),
+              Text(
+                'Browse',
+                style: TextStyle(
+                  color: currentStep >= 2 ? AppColors.teal : AppColors.mediumGray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
+            ],
           ),
         ),
       ],

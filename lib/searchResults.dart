@@ -22,6 +22,7 @@ class SearchResultsScreen extends StatefulWidget {
 
 class _SearchResultsScreenState extends State<SearchResultsScreen> {
   int _currentIndex = 1;
+  bool _isMapView = true;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +85,17 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           ),
         ],
       ),
-      body: _buildEmptyState(),
+      body: Stack(
+        children: [
+          _buildMapPlaceholder(),
+          Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: _buildViewToggle(),
+          ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -169,21 +180,35 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40.0),
+  Widget _buildMapPlaceholder() {
+    return Container(
+      color: AppColors.lightGray,
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.search_off,
-              size: 120,
-              color: AppColors.mediumGray.withOpacity(0.5),
+            Container(
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _isMapView ? Icons.map_outlined : Icons.list_alt,
+                size: 80,
+                color: AppColors.teal,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
-              'No Results Found',
+              _isMapView ? 'Map View' : 'List View',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -191,32 +216,123 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'We couldn\'t find any items matching "${widget.searchQuery}"',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: AppColors.mediumGray,
-                height: 1.5,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'No items found for "${widget.searchQuery}"',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.mediumGray,
+                  height: 1.5,
+                ),
               ),
             ),
             const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              icon: const Icon(Icons.refresh, size: 20),
-              label: const Text('Try Another Search'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                foregroundColor: AppColors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                'Maps API Integration Point',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.mediumGray,
+                  fontWeight: FontWeight.w500,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewToggle() {
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 15,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildToggleButton(
+                icon: Icons.map,
+                label: 'Map View',
+                isActive: _isMapView,
+                onTap: () {
+                  setState(() {
+                    _isMapView = true;
+                  });
+                },
+              ),
+              _buildToggleButton(
+                icon: Icons.list,
+                label: 'List View',
+                isActive: !_isMapView,
+                onTap: () {
+                  setState(() {
+                    _isMapView = false;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.teal : Colors.transparent,
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? AppColors.white : AppColors.mediumGray,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? AppColors.white : AppColors.mediumGray,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                fontSize: 14,
               ),
             ),
           ],

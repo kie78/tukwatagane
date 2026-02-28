@@ -18,9 +18,6 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   int _currentIndex = 4;
-  final TextEditingController _nameController = TextEditingController(text: 'Eric Doe');
-  final TextEditingController _telController = TextEditingController(text: '0771234567');
-  final TextEditingController _locationController = TextEditingController(text: 'Kihumuro Campus');
   final ImagePicker _picker = ImagePicker();
   XFile? _profileImage;
 
@@ -49,9 +46,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _telController.dispose();
-    _locationController.dispose();
     super.dispose();
   }
 
@@ -202,7 +196,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 children: [
                   // Section Header
                   Text(
-                    'Student Details',
+                    'Account Information',
                     style: TextStyle(
                       color: AppColors.darkGray,
                       fontWeight: FontWeight.bold,
@@ -230,7 +224,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'LOCKED CREDENTIALS',
+                            'STUDENT DETAILS',
                             style: TextStyle(
                               color: AppColors.mediumGray,
                               fontSize: 12,
@@ -257,7 +251,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Editable Information Card
+                  // Personal Information Card
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -277,7 +271,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'EDIT CREDENTIALS',
+                            'PERSONAL INFORMATION',
                             style: TextStyle(
                               color: AppColors.mediumGray,
                               fontSize: 12,
@@ -287,21 +281,23 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           ),
                           const SizedBox(height: 12),
                           // NAME Field
-                          _buildEditableField(
+                          _buildLockedField(
                             label: 'NAME',
-                            controller: _nameController,
+                            value: 'Eric Doe',
+                            prefixIcon: Icons.person,
                           ),
                           const SizedBox(height: 12),
                           // TEL Field
-                          _buildEditableField(
+                          _buildLockedField(
                             label: 'TEL',
-                            controller: _telController,
+                            value: '0771234567',
+                            prefixIcon: Icons.phone,
                           ),
                           const SizedBox(height: 12),
                           // REGISTERED LOCATION Field
-                          _buildEditableField(
+                          _buildLockedField(
                             label: 'REGISTERED LOCATION',
-                            controller: _locationController,
+                            value: 'Kihumuro Campus',
                             prefixIcon: Icons.location_on,
                           ),
                         ],
@@ -445,63 +441,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 size: 18,
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEditableField({
-    required String label,
-    required TextEditingController controller,
-    IconData? prefixIcon,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.mediumGray,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.lightGray,
-              width: 1,
-            ),
-          ),
-          child: TextField(
-            controller: controller,
-            style: TextStyle(
-              color: AppColors.darkGray,
-              fontSize: 15,
-            ),
-            decoration: InputDecoration(
-              prefixIcon: prefixIcon != null
-                  ? Icon(
-                      prefixIcon,
-                      color: AppColors.mediumGray,
-                      size: 20,
-                    )
-                  : null,
-              suffixIcon: Icon(
-                Icons.edit,
-                color: Colors.black,
-                size: 18,
-              ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: prefixIcon != null ? 0 : 16,
-                vertical: 14,
-              ),
-            ),
           ),
         ),
       ],
