@@ -1,4 +1,4 @@
-package com.example.tukwatagane
+package com.smoke.tukwatagane
 
 import io.flutter.embedding.android.FlutterActivity
 
