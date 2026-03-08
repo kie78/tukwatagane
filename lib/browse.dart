@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'main.dart';
-import 'search.dart';
-import 'sell.dart';
-import 'chat.dart';
-import 'account.dart';
 import 'userProfile.dart';
 import 'productDetails.dart';
 import 'vendorProfile.dart';
 import 'inbox.dart';
 import 'saved.dart';
 import 'config/bookmarks_service.dart';
+import 'widgets/main_nav_bar.dart';
 
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({super.key});
@@ -20,8 +17,6 @@ class BrowseScreen extends StatefulWidget {
 }
 
 class _BrowseScreenState extends State<BrowseScreen> {
-  int _currentIndex = 0;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,82 +100,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           );
         },
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          if (index == 1) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SearchScreen()),
-            );
-          } else if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SellScreen()),
-            );
-          } else if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ChatScreen()),
-            );
-          } else if (index == 4) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => AccountScreen()),
-            );
-          }
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.white,
-        selectedItemColor: AppColors.teal,
-        unselectedItemColor: AppColors.mediumGray,
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w600,
-          height: 1.0,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          height: 1.0,
-        ),
-        iconSize: 24,
-        elevation: 0,
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.list_alt_outlined),
-            activeIcon: Icon(Icons.list_alt),
-            label: 'Browse',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            activeIcon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.add_circle_outline,
-              color: _currentIndex == 2
-                  ? AppColors.teal
-                  : AppColors.mediumGray,
-            ),
-            activeIcon: Icon(Icons.add_circle, color: AppColors.teal),
-            label: 'Sell',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Chat',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.account_circle_outlined),
-            activeIcon: Icon(Icons.account_circle),
-            label: 'Account',
-          ),
-        ],
-      ),
+      bottomNavigationBar: const MainNavBar(currentIndex: 0),
     );
   }
 }

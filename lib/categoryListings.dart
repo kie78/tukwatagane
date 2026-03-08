@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'main.dart';
-import 'browse.dart';
-import 'search.dart';
-import 'sell.dart';
-import 'chat.dart';
-import 'account.dart';
 import 'userProfile.dart';
 import 'saved.dart';
+import 'widgets/main_nav_bar.dart';
 
 class CategoryListingsScreen extends StatefulWidget {
   final String categoryName;
@@ -23,7 +19,6 @@ class CategoryListingsScreen extends StatefulWidget {
 }
 
 class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
-  int _currentIndex = 1;
   bool _isMapView = true;
 
   @override
@@ -40,10 +35,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
             ),
           ),
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SearchScreen()),
-            );
+            Navigator.pushReplacementNamed(context, '/search');
           },
         ),
         title: Text(
@@ -106,87 +98,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => BrowseScreen()),
-            );
-          } else if (index == 1) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SearchScreen()),
-            );
-          } else if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SellScreen()),
-            );
-          } else if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ChatScreen()),
-            );
-          } else if (index == 4) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => AccountScreen()),
-            );
-          }
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.white,
-        selectedItemColor: AppColors.teal,
-        unselectedItemColor: AppColors.mediumGray,
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w600,
-          height: 1.0,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          height: 1.0,
-        ),
-        iconSize: 24,
-        elevation: 0,
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.list_alt_outlined),
-            activeIcon: Icon(Icons.list_alt),
-            label: 'Browse',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            activeIcon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.add_circle_outline,
-              color: _currentIndex == 2
-                  ? AppColors.teal
-                  : AppColors.mediumGray,
-            ),
-            activeIcon: Icon(Icons.add_circle, color: AppColors.teal),
-            label: 'Sell',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Chat',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.account_circle_outlined),
-            activeIcon: Icon(Icons.account_circle),
-            label: 'Account',
-          ),
-        ],
-      ),
+      bottomNavigationBar: const MainNavBar(currentIndex: 1),
     );
   }
 

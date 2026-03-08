@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'login.dart';
+import 'browse.dart';
+import 'search.dart';
+import 'sell.dart';
+import 'chat.dart';
+import 'account.dart';
 
 void main() {
   runApp(const MainApp());
@@ -35,6 +40,13 @@ class MainApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const LoginScreen(),
+      routes: {
+        '/browse':  (_) => const BrowseScreen(),
+        '/search':  (_) => const SearchScreen(),
+        '/sell':    (_) => const SellScreen(),
+        '/chat':    (_) => const ChatScreen(),
+        '/account': (_) => const AccountScreen(),
+      },
     );
   }
 }
