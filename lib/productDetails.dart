@@ -17,6 +17,8 @@ class ProductDetailsScreen extends StatefulWidget {
   final String? vendorAvatar;
   final double? vendorRating;
   final bool isVerified;
+  final int? ownerUserIdHint;
+  final bool? isOwnListingHint;
 
   const ProductDetailsScreen({
     super.key,
@@ -30,6 +32,8 @@ class ProductDetailsScreen extends StatefulWidget {
     this.vendorAvatar,
     this.vendorRating,
     this.isVerified = false,
+    this.ownerUserIdHint,
+    this.isOwnListingHint,
   });
 
   @override
@@ -49,13 +53,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   late String _description;
 
   bool get _isOwnListing =>
-      _myUserId != null && _ownerUserId != null && _myUserId == _ownerUserId;
+      widget.isOwnListingHint == true ||
+      (_myUserId != null && _ownerUserId != null && _myUserId == _ownerUserId);
 
   final List<String> _images = [];
 
   @override
   void initState() {
     super.initState();
+    _ownerUserId = widget.ownerUserIdHint;
     _description = widget.productDescription.trim();
     // Show the primary image immediately while fetching the full listing
     if (widget.imageUrl != null) _images.add(widget.imageUrl!);
@@ -188,8 +194,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.lightGray,
-      body: Stack(
-        children: [
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        child: Stack(
+          children: [
           // Main Content
           SingleChildScrollView(
             child: Column(
@@ -609,7 +618,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -23,6 +23,7 @@ class BrowseScreen extends StatefulWidget {
 
 class _BrowseScreenState extends State<BrowseScreen> {
   List<ListingCardResponse> _listings = [];
+  String? _myFullName;
   bool _isLoading = true;
 
   @override
@@ -37,9 +38,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
     try {
       // Use registered location from profile (collected at sign-up)
       double lat = -0.5950, lng = 30.5970;
+      String? myFullName = _myFullName;
       try {
         final profileResp = await apiClient.dio.get('/users/profile');
         final profile = UserProfile.fromJson(profileResp.data);
+        myFullName = profile.fullName;
         final loc = profile.registeredLocation ?? profile.alternateLocation;
         final regLat = loc?.lat;
         final regLng = loc?.lng;
@@ -56,7 +59,12 @@ class _BrowseScreenState extends State<BrowseScreen> {
         'size': 20,
       });
       final page = ListingPage.fromJson(resp.data);
-      if (mounted) setState(() => _listings = page.items);
+      if (mounted) {
+        setState(() {
+          _listings = page.items;
+          _myFullName = myFullName;
+        });
+      }
     } on DioException catch (_) {
       // silently keep empty list on error
     } finally {
@@ -169,6 +177,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                         isNew: DateTime.now().difference(item.createdAt).inDays < 1,
                         ownerUserId: item.ownerUserId,
                         description: item.description,
+                        myFullName: _myFullName,
                       );
                     },
                   ),
@@ -191,6 +200,7 @@ class ProductCard extends StatefulWidget {
   final bool isNew;
   final int? ownerUserId;
   final String? description;
+  final String? myFullName;
 
   const ProductCard({
     super.key,
@@ -206,6 +216,7 @@ class ProductCard extends StatefulWidget {
     this.isNew = false,
     this.ownerUserId,
     this.description,
+    this.myFullName,
   });
 
   @override
@@ -225,7 +236,12 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   bool get _isOwnListing =>
-      _myUserId != null && widget.ownerUserId != null && _myUserId == widget.ownerUserId;
+      (_myUserId != null &&
+        widget.ownerUserId != null &&
+        _myUserId == widget.ownerUserId) ||
+      ((widget.myFullName ?? '').trim().isNotEmpty &&
+        widget.sellerName.trim().toLowerCase() ==
+          widget.myFullName!.trim().toLowerCase());
 
   void _toggleBookmark() {
     setState(() => _isBookmarked = !_isBookmarked);
@@ -275,6 +291,8 @@ Check out this item on Tukwatagane!
               vendorName: widget.sellerName,
               vendorLocation: widget.location,
               vendorAvatar: widget.sellerAvatar,
+              ownerUserIdHint: widget.ownerUserId,
+              isOwnListingHint: _isOwnListing,
             ),
           ),
         );

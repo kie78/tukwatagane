@@ -3,6 +3,7 @@ import 'main.dart';
 import 'productDetails.dart';
 import 'inbox.dart';
 import 'core/api_client.dart';
+import 'core/auth_service.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -33,12 +34,36 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
   List<ListingCardResponse> _listings = [];
   bool _loadingProfile = false;
   bool _loadingListings = false;
+  int? _myUserId;
+  String? _myUserName;
+  int? _resolvedVendorUserId;
+
+  bool get _isOwnVendorProfile =>
+      _myUserId != null &&
+      ((_resolvedVendorUserId != null && _myUserId == _resolvedVendorUserId) ||
+          (_profile != null && _myUserId == _profile!.id) ||
+          (_myUserName != null &&
+              _myUserName!.trim().isNotEmpty &&
+              _myUserName!.trim().toLowerCase() ==
+                  widget.vendorName.trim().toLowerCase()));
 
   @override
   void initState() {
     super.initState();
+    _loadMyUserId();
     _initProfile();
-    _loadListings();
+  }
+
+  Future<void> _loadMyUserId() async {
+    final id = await authService.getUserId();
+    final name = await authService.getUserName();
+    if (mounted) {
+      setState(() {
+        _myUserId = id;
+        _myUserName = name;
+      });
+    }
+    await _loadListings();
   }
 
   Future<void> _initProfile() async {
@@ -51,20 +76,30 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         userId = listing.ownerUserId;
       } catch (_) {}
     }
-    if (userId != null) await _loadProfile(userId);
+    if (userId != null) {
+      if (mounted) setState(() => _resolvedVendorUserId = userId);
+      await _loadProfile(userId);
+    }
+    await _loadListings();
   }
 
   Future<void> _loadProfile(int userId) async {
     setState(() => _loadingProfile = true);
     try {
       final resp = await apiClient.dio.get('/users/$userId/public');
-      if (mounted) setState(() => _profile = PublicUserProfile.fromJson(resp.data));
+      final profile = PublicUserProfile.fromJson(resp.data);
+      if (mounted) {
+        setState(() {
+          _profile = profile;
+          _resolvedVendorUserId = profile.id;
+        });
+      }
     } catch (_) {}
     if (mounted) setState(() => _loadingProfile = false);
   }
 
   Future<void> _loadListings() async {
-    if (widget.vendorName.trim().isEmpty) return;
+    if (widget.vendorName.trim().isEmpty && _resolvedVendorUserId == null) return;
     setState(() => _loadingListings = true);
     try {
       // Use nearby feed (MUST campus centre) and filter client-side by ownerFullName,
@@ -76,11 +111,49 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         'size': 50,
       });
       final page = ListingPage.fromJson(resp.data);
-      final name = widget.vendorName.trim().toLowerCase();
-      final vendorListings = page.items
-          .where((item) => item.ownerFullName?.trim().toLowerCase() == name)
-          .take(6)
-          .toList();
+      List<ListingCardResponse> vendorListings;
+      if (_resolvedVendorUserId != null) {
+        vendorListings = page.items
+            .where((item) => item.ownerUserId == _resolvedVendorUserId)
+            .take(6)
+            .toList();
+      } else {
+        final name = widget.vendorName.trim().toLowerCase();
+        vendorListings = page.items
+            .where((item) => item.ownerFullName?.trim().toLowerCase() == name)
+            .take(6)
+            .toList();
+      }
+
+      // If this is my own profile and nearby filter returned nothing, use my listings endpoint.
+      if (vendorListings.isEmpty && _isOwnVendorProfile) {
+        try {
+          final myResp = await apiClient.dio.get(
+            '/listings/my',
+            queryParameters: {'status': 'ACTIVE'},
+          );
+          final myListings = (myResp.data['items'] as List? ?? const [])
+              .map((e) => ListingResponse.fromJson(e))
+              .take(6)
+              .map((item) => ListingCardResponse(
+                    id: item.id,
+                    title: item.title,
+                    priceUgx: item.priceUgx,
+                    currency: item.currency,
+                    categoryCode: item.categoryCode,
+                    description: item.description,
+                    locationText: item.locationText,
+                    campus: item.campus,
+                    primaryImageUrl: item.primaryImageUrl,
+                    createdAt: item.createdAt,
+                    ownerFullName: widget.vendorName,
+                    ownerUserId: item.ownerUserId,
+                  ))
+              .toList();
+          vendorListings = myListings;
+        } catch (_) {}
+      }
+
       if (mounted) setState(() => _listings = vendorListings);
     } catch (_) {}
     if (mounted) setState(() => _loadingListings = false);
@@ -193,10 +266,6 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // Location zone
-                  if (campus.isNotEmpty)
-                    _buildInfoRow(Icons.location_on_outlined, campus),
                   const SizedBox(height: 32),
                   // Verified Credentials Cards
                   if (_loadingProfile)
@@ -206,7 +275,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                       _buildCredentialCard(
                         icon: Icons.location_on,
                         title: campus,
-                        subtitle: 'Campus Location',
+                        subtitle: 'Primary Location',
                         isVerified: false,
                       ),
                     if (memberSince != null) ...[
@@ -264,99 +333,67 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             ),
           ),
           // Fixed Message Button
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  final id = widget.listingId;
-                  if (id == null) return;
-                  try {
-                    final resp = await apiClient.dio.post('/conversations', data: {'listingId': id});
-                    final conv = ConversationResponse.fromJson(resp.data);
-                    if (!context.mounted) return;
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => InboxScreen(
-                          conversationId: conv.id,
-                          userName: widget.vendorName,
-                          isOnline: widget.isOnline,
-                        ),
-                      ),
-                    );
-                  } catch (_) {}
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.teal,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  elevation: 0,
-                ),
-                icon: Icon(
-                  Icons.chat_bubble_outline,
+          if (!_isOwnVendorProfile && widget.listingId != null)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
                   color: AppColors.white,
-                  size: 20,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
                 ),
-                label: Text(
-                  'Message Vendor',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final id = widget.listingId;
+                    if (id == null) return;
+                    try {
+                      final resp = await apiClient.dio.post('/conversations', data: {'listingId': id});
+                      final conv = ConversationResponse.fromJson(resp.data);
+                      if (!context.mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => InboxScreen(
+                            conversationId: conv.id,
+                            userName: widget.vendorName,
+                            isOnline: widget.isOnline,
+                          ),
+                        ),
+                      );
+                    } catch (_) {}
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.teal,
+                    foregroundColor: AppColors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 0,
+                  ),
+                  icon: Icon(
+                    Icons.chat_bubble_outline,
+                    color: AppColors.white,
+                    size: 20,
+                  ),
+                  label: Text(
+                    'Message Vendor',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.teal, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppColors.darkGray,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
         ],
       ),
     );
