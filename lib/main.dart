@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'login.dart';
 import 'browse.dart';
 import 'core/auth_service.dart';
@@ -14,6 +15,7 @@ final ValueNotifier<int> unreadNotifier = ValueNotifier(0);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
   final loggedIn = await authService.isLoggedIn();
   runApp(MainApp(startLoggedIn: loggedIn));
 }

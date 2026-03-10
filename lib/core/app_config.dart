@@ -1,3 +1,5 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class AppConfig {
   static const bool isProduction =
       bool.fromEnvironment('PRODUCTION', defaultValue: true);
@@ -9,7 +11,8 @@ class AppConfig {
 
   static String get baseUrl => isProduction ? _prodBaseUrl : _localBaseUrl;
 
-  static const String mapsApiKey = 'AIzaSyB1KiyE5au0z3zLB_0PS84999_hD9YbhTc';
+    static String get mapsApiKey =>
+            dotenv.env['GOOGLE_API_KEY'] ?? dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
 
   static bool isAllowedEmail(String email) =>
       email.endsWith('@must.ac.ug') || email.endsWith('@std.must.ac.ug');
