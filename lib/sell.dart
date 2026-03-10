@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 import 'dart:io';
 import 'main.dart';
-import 'userProfile.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'core/api_exception.dart';
+import 'models/models.dart';
+import 'config/campus_zones.dart';
 
 class SellScreen extends StatefulWidget {
   final String? editingItemId;
@@ -31,12 +35,26 @@ class SellScreen extends StatefulWidget {
 }
 
 class _SellScreenState extends State<SellScreen> {
+  bool _isLoading = false;
   bool _useRegisteredLocation = false;
+  String _registeredLocationLabel = 'Loading...';
+  double? _registeredLocationLat;
+  double? _registeredLocationLng;
   String? _selectedCategory;
+  List<ListingImageResponse> _existingImages = [];
+  String? _selectedZone;
+
+  static const _categoryCodeMap = {
+    'Electronics': 'ELECTRONICS',
+    'Baked Goods': 'BAKERY',
+    'Clothing and Footwear': 'CLOTHING',
+    'Fast Food': 'FAST_FOOD',
+    'Drinks and Beverages': 'BEVERAGES',
+    'Jewelry and Accessories': 'BEAUTY',
+  };
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _locationController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
 
@@ -52,21 +70,57 @@ class _SellScreenState extends State<SellScreen> {
   @override
   void initState() {
     super.initState();
+    _loadRegisteredLocation();
     // Pre-populate fields if editing
     if (widget.editingItemId != null) {
       _titleController.text = widget.editingTitle ?? '';
       _priceController.text = widget.editingPrice ?? '';
       _descriptionController.text = widget.editingDescription ?? '';
       _selectedCategory = widget.editingCategory;
-      
+      _loadExistingImages();
+
       if (widget.editingLocation != null) {
-        if (widget.editingLocation == 'Kampala, Uganda') {
+        if (widget.editingLocation == 'useRegistered') {
           _useRegisteredLocation = true;
         } else {
           _useRegisteredLocation = false;
-          _locationController.text = widget.editingLocation!;
+          if (campusZones.any((z) => z.name == widget.editingLocation)) {
+            _selectedZone = widget.editingLocation;
+          }
         }
       }
+    }
+  }
+
+  Future<void> _loadExistingImages() async {
+    try {
+      final resp = await apiClient.dio.get('/listings/${widget.editingItemId}');
+      final listing = ListingResponse.fromJson(resp.data);
+      if (mounted) setState(() => _existingImages = listing.images);
+    } catch (_) {}
+  }
+
+  Future<void> _removeExistingImage(ListingImageResponse img) async {
+    try {
+      await apiClient.dio.delete('/listings/${widget.editingItemId}/images/${img.id}');
+      if (mounted) setState(() => _existingImages.removeWhere((i) => i.id == img.id));
+    } catch (_) {}
+  }
+
+  Future<void> _loadRegisteredLocation() async {
+    try {
+      final resp = await apiClient.dio.get('/users/profile');
+      final profile = UserProfile.fromJson(resp.data);
+      final loc = profile.registeredLocation ?? profile.alternateLocation;
+      final fallback = loc?.label ?? profile.campus ?? 'Your registered location';
+      final label = zoneLabel(loc?.lat, loc?.lng, fallback: fallback);
+      if (mounted) setState(() {
+        _registeredLocationLabel = label;
+        _registeredLocationLat = loc?.lat;
+        _registeredLocationLng = loc?.lng;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _registeredLocationLabel = 'Your registered location');
     }
   }
 
@@ -75,12 +129,11 @@ class _SellScreenState extends State<SellScreen> {
     _titleController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
-    _locationController.dispose();
     super.dispose();
   }
 
   Future<void> _pickImage() async {
-    if (_selectedImages.length >= 3) {
+    if (_existingImages.length + _selectedImages.length >= 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Maximum 3 photos allowed'),
@@ -131,6 +184,174 @@ class _SellScreenState extends State<SellScreen> {
     });
   }
 
+  Future<void> _submitListing() async {
+    final title = _titleController.text.trim();
+    final priceText = _priceController.text.trim();
+    final description = _descriptionController.text.trim();
+
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a title'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (priceText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a price'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final price = int.tryParse(priceText.replaceAll(',', ''));
+    if (price == null || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid price'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a category'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (!_useRegisteredLocation && _selectedZone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a location zone'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final categoryCode = _categoryCodeMap[_selectedCategory!] ?? _selectedCategory!;
+
+      ListingResponse listing;
+      if (widget.editingItemId != null) {
+        final centroid = _selectedZone != null ? zoneCentroid(_selectedZone!) : null;
+        final resp = await apiClient.dio.put('/listings/${widget.editingItemId}', data: {
+          'title': title,
+          'priceUgx': price,
+          'categoryCode': categoryCode,
+          'description': description,
+          'locationText': _useRegisteredLocation ? _registeredLocationLabel : (_selectedZone ?? ''),
+          'useRegisteredLocation': _useRegisteredLocation,
+          if (_useRegisteredLocation && _registeredLocationLat != null) 'lat': _registeredLocationLat,
+          if (_useRegisteredLocation && _registeredLocationLng != null) 'lng': _registeredLocationLng,
+          if (!_useRegisteredLocation && centroid != null) 'lat': centroid.lat,
+          if (!_useRegisteredLocation && centroid != null) 'lng': centroid.lng,
+        });
+        listing = ListingResponse.fromJson(resp.data);
+      } else {
+        final centroid = _selectedZone != null ? zoneCentroid(_selectedZone!) : null;
+        final resp = await apiClient.dio.post('/listings', data: {
+          'title': title,
+          'priceUgx': price,
+          'categoryCode': categoryCode,
+          'description': description,
+          'locationText': _useRegisteredLocation ? _registeredLocationLabel : (_selectedZone ?? ''),
+          'useRegisteredLocation': _useRegisteredLocation,
+          if (_useRegisteredLocation && _registeredLocationLat != null) 'lat': _registeredLocationLat,
+          if (_useRegisteredLocation && _registeredLocationLng != null) 'lng': _registeredLocationLng,
+          if (!_useRegisteredLocation && centroid != null) 'lat': centroid.lat,
+          if (!_useRegisteredLocation && centroid != null) 'lng': centroid.lng,
+        });
+        listing = ListingResponse.fromJson(resp.data);
+      }
+
+      // Upload images
+      int uploadsFailed = 0;
+      for (final img in _selectedImages) {
+        try {
+          // Step 1: get signed upload credentials from our backend
+          debugPrint('[IMG] Step 1: requesting signature for listing ${listing.id}');
+          final sigResp = await apiClient.dio.post('/uploads/cloudinary/signature', data: {
+            'listingId': listing.id,
+            'folder': 'campusplug/listings/${listing.id}',
+          });
+          final sig = CloudinarySignatureResponse.fromJson(sigResp.data);
+          debugPrint('[IMG] Step 1 OK: cloudName=${sig.cloudName}, params=${sig.params}');
+
+          // Step 2: upload the file directly to Cloudinary
+          debugPrint('[IMG] Step 2: uploading to Cloudinary');
+          final formData = FormData.fromMap({
+            'file': await MultipartFile.fromFile(img.path, filename: img.name),
+            'api_key': sig.apiKey,
+            'timestamp': sig.timestamp.toString(),
+            'signature': sig.signature,
+            ...sig.params,
+          });
+          final cloudinaryUrl =
+              'https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload';
+          final cloudResp = await Dio().post(cloudinaryUrl, data: formData);
+          final cloudData = cloudResp.data as Map<String, dynamic>;
+          debugPrint('[IMG] Step 2 OK: url=${cloudData['secure_url']}');
+
+          // Step 3: register the image against the listing in our backend
+          debugPrint('[IMG] Step 3: registering image with backend');
+          await apiClient.dio.post('/listings/${listing.id}/images', data: {
+            'publicId': cloudData['public_id'],
+            'secureUrl': cloudData['secure_url'],
+            'width': cloudData['width'],
+            'height': cloudData['height'],
+            'bytes': cloudData['bytes'],
+            'format': cloudData['format'],
+          });
+          debugPrint('[IMG] Step 3 OK: image registered');
+        } catch (e) {
+          uploadsFailed++;
+          debugPrint('[IMG] FAILED: $e');
+          if (e is DioException && e.response != null) {
+            debugPrint('[IMG] Response body: ${e.response?.data}');
+          }
+        }
+      }
+
+      if (mounted) {
+        if (uploadsFailed > 0 && _selectedImages.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                uploadsFailed == _selectedImages.length
+                    ? 'Listing saved, but image upload failed. Check your connection and try editing.'
+                    : 'Listing saved, but $uploadsFailed image(s) failed to upload.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.editingItemId != null
+                  ? 'Listing updated!'
+                  : 'Listing posted!'),
+              backgroundColor: AppColors.teal,
+            ),
+          );
+        }
+        if (widget.editingItemId != null) {
+          Navigator.pop(context);
+        } else {
+          Navigator.pushReplacementNamed(context, '/browse');
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,28 +391,6 @@ class _SellScreenState extends State<SellScreen> {
               );
             },
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: Color(0xFFD4C5B9),
-                child: Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -227,7 +426,7 @@ class _SellScreenState extends State<SellScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (_selectedImages.isEmpty) ...[
+                    if (_existingImages.isEmpty && _selectedImages.isEmpty) ...[
                       Stack(
                         children: [
                           Icon(
@@ -275,15 +474,14 @@ class _SellScreenState extends State<SellScreen> {
                       Wrap(
                         spacing: 12,
                         runSpacing: 12,
-                        children: _selectedImages.asMap().entries.map((entry) {
-                          int index = entry.key;
-                          XFile image = entry.value;
-                          return Stack(
+                        children: [
+                          // Existing uploaded images
+                          ..._existingImages.map((img) => Stack(
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: Image.file(
-                                  File(image.path),
+                                child: Image.network(
+                                  img.secureUrl,
                                   width: 100,
                                   height: 100,
                                   fit: BoxFit.cover,
@@ -293,35 +491,64 @@ class _SellScreenState extends State<SellScreen> {
                                 top: 4,
                                 right: 4,
                                 child: GestureDetector(
-                                  onTap: () => _removeImage(index),
+                                  onTap: () => _removeExistingImage(img),
                                   child: Container(
                                     padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
+                                    decoration: const BoxDecoration(
                                       color: Colors.red,
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(
-                                      Icons.close,
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
+                                    child: const Icon(Icons.close, color: Colors.white, size: 16),
                                   ),
                                 ),
                               ),
                             ],
-                          );
-                        }).toList(),
+                          )),
+                          // Newly selected images
+                          ..._selectedImages.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final image = entry.value;
+                            return Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.file(
+                                    File(image.path),
+                                    width: 100,
+                                    height: 100,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: () => _removeImage(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                        ],
                       ),
                     ],
                     const SizedBox(height: 20),
-                    _selectedImages.length < 3
+                    (_existingImages.length + _selectedImages.length) < 3
                         ? ElevatedButton.icon(
                             onPressed: _pickImage,
                             icon: const Icon(Icons.add, color: Colors.white),
                             label: Text(
-                              _selectedImages.isEmpty 
-                                ? 'Add Photo' 
-                                : 'Add More (${_selectedImages.length}/3)',
+                              (_existingImages.isEmpty && _selectedImages.isEmpty)
+                                ? 'Add Photo'
+                                : 'Add More (${_existingImages.length + _selectedImages.length}/3)',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -598,7 +825,7 @@ class _SellScreenState extends State<SellScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Kampala, Uganda',
+                          _registeredLocationLabel,
                           style: TextStyle(
                             color: AppColors.mediumGray,
                             fontSize: 14,
@@ -653,11 +880,25 @@ class _SellScreenState extends State<SellScreen> {
                 const SizedBox(height: 8),
                 
                 // Alternate Location
-                TextField(
-                  controller: _locationController,
+                DropdownButtonFormField<String>(
+                  value: _selectedZone,
+                  hint: const Text(
+                    'Select a zone',
+                    style: TextStyle(color: AppColors.mediumGray),
+                  ),
+                  isExpanded: true,
+                  menuMaxHeight: 300,
+                  onChanged: (value) => setState(() => _selectedZone = value),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: AppColors.mediumGray,
+                  ),
+                  dropdownColor: AppColors.white,
+                  style: const TextStyle(
+                    color: AppColors.darkGray,
+                    fontSize: 16,
+                  ),
                   decoration: InputDecoration(
-                    hintText: 'City, Region',
-                    hintStyle: const TextStyle(color: AppColors.mediumGray),
                     prefixIcon: const Icon(
                       Icons.location_on,
                       color: AppColors.mediumGray,
@@ -681,6 +922,12 @@ class _SellScreenState extends State<SellScreen> {
                       vertical: 12,
                     ),
                   ),
+                  items: campusZones.map((zone) {
+                    return DropdownMenuItem<String>(
+                      value: zone.name,
+                      child: Text(zone.name),
+                    );
+                  }).toList(),
                 ),
               ],
               const SizedBox(height: 32),
@@ -689,7 +936,7 @@ class _SellScreenState extends State<SellScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _isLoading ? null : _submitListing,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.teal,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -697,25 +944,34 @@ class _SellScreenState extends State<SellScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        widget.editingItemId != null ? 'Update Listing' : 'Post Listing',
-                        style: TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: AppColors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              widget.editingItemId != null ? 'Update Listing' : 'Post Listing',
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.arrow_forward,
+                              color: AppColors.white,
+                              size: 20,
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: AppColors.white,
-                        size: 20,
-                      ),
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(height: 24),

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
 import 'browse.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
+import 'core/api_exception.dart';
+import 'models/models.dart';
 
 class AccountAuthScreen extends StatefulWidget {
   final String email;
@@ -31,6 +36,105 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
   bool _isConfirmPasswordVisible = false;
   bool _isOtpConfirmed = false;
   bool _showPasswordFields = false;
+  bool _isLoading = false;
+
+  String get _enteredOtp =>
+      _otpControllers.map((c) => c.text).join();
+
+  Future<void> _handleOtpSubmit() async {
+    final otp = _enteredOtp;
+    if (otp.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the 5-digit code.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await apiClient.dio.post('/auth/register/verify-otp', data: {
+        'email': widget.email,
+        'otp': otp,
+      });
+      if (!mounted) return;
+      setState(() {
+        _isOtpConfirmed = true;
+        _showPasswordFields = true;
+      });
+    } on DioException catch (e) {
+      final ex = ApiException.fromDio(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ex.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleConfirm() async {
+    final password = _passwordController.text;
+    final confirm = _confirmPasswordController.text;
+
+    if (password.isEmpty || confirm.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter and confirm your password.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (password != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passwords do not match.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final resp = await apiClient.dio.post('/auth/register/set-password', data: {
+        'email': widget.email,
+        'password': password,
+        'confirmPassword': confirm,
+      });
+      final auth = AuthResponse.fromJson(resp.data);
+      await apiClient.saveToken(auth.token);
+      await authService.saveSession(
+        token: auth.token,
+        userId: auth.user.id,
+        email: auth.user.email,
+        fullName: auth.user.fullName,
+      );
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const BrowseScreen()),
+        (route) => false,
+      );
+    } on DioException catch (e) {
+      final ex = ApiException.fromDio(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ex.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -59,13 +163,6 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
     
     final visibleChars = username.substring(0, 2);
     return '$visibleChars***@$domain';
-  }
-
-  void _handleOtpSubmit() {
-    setState(() {
-      _isOtpConfirmed = true;
-      _showPasswordFields = true;
-    });
   }
 
   @override
@@ -227,38 +324,44 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isOtpConfirmed ? null : _handleOtpSubmit,
+                    onPressed: (_isOtpConfirmed || _isLoading) ? null : _handleOtpSubmit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _isOtpConfirmed 
-                          ? AppColors.teal 
+                      backgroundColor: _isOtpConfirmed
+                          ? AppColors.teal
                           : Colors.black,
                       foregroundColor: AppColors.white,
-                      disabledBackgroundColor: AppColors.teal,
+                      disabledBackgroundColor:
+                          _isOtpConfirmed ? AppColors.teal : Colors.black54,
                       disabledForegroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_isOtpConfirmed)
-                          Icon(
-                            Icons.check_circle,
-                            size: 20,
+                    child: _isLoading && !_isOtpConfirmed
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_isOtpConfirmed)
+                                const Icon(Icons.check_circle, size: 20),
+                              if (_isOtpConfirmed) const SizedBox(width: 8),
+                              Text(
+                                _isOtpConfirmed ? 'Confirmed' : 'Submit',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                        if (_isOtpConfirmed)
-                          const SizedBox(width: 8),
-                        Text(
-                          _isOtpConfirmed ? 'Confirmed' : 'Submit',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
                 // Password Fields (shown after OTP confirmation)
@@ -284,6 +387,14 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                       });
                     },
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Min. 8 characters · uppercase · number · special character (e.g. SecurePass123!)',
+                    style: TextStyle(
+                      color: AppColors.mediumGray,
+                      fontSize: 12,
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   _buildPasswordField(
                     label: 'Confirm Password',
@@ -301,14 +412,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BrowseScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: _isLoading ? null : _handleConfirm,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,
@@ -317,13 +421,22 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Confirm',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],

@@ -2,27 +2,109 @@ import 'package:flutter/material.dart';
 import 'main.dart';
 import 'productDetails.dart';
 import 'inbox.dart';
+import 'core/api_client.dart';
+import 'models/models.dart';
+import 'config/campus_zones.dart';
 
-class VendorProfileScreen extends StatelessWidget {
+class VendorProfileScreen extends StatefulWidget {
   final String vendorName;
-  final String vendorAvatar;
+  final String? vendorAvatar;
   final String primaryLocation;
-  final String registrationNumber;
-  final String email;
+  final int? vendorUserId;
   final bool isOnline;
+  final int? listingId;
 
   const VendorProfileScreen({
     super.key,
     required this.vendorName,
-    required this.vendorAvatar,
-    this.primaryLocation = 'Kihumuro Campus',
-    this.registrationNumber = '2023/BIT/216/PS',
-    this.email = 'eric@must.ac.ug',
-    this.isOnline = true,
+    this.vendorAvatar,
+    this.primaryLocation = '',
+    this.vendorUserId,
+    this.isOnline = false,
+    this.listingId,
   });
 
   @override
+  State<VendorProfileScreen> createState() => _VendorProfileScreenState();
+}
+
+class _VendorProfileScreenState extends State<VendorProfileScreen> {
+  PublicUserProfile? _profile;
+  List<ListingCardResponse> _listings = [];
+  bool _loadingProfile = false;
+  bool _loadingListings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initProfile();
+    _loadListings();
+  }
+
+  Future<void> _initProfile() async {
+    int? userId = widget.vendorUserId;
+    // If userId wasn't passed directly, resolve it from the listing
+    if (userId == null && widget.listingId != null) {
+      try {
+        final resp = await apiClient.dio.get('/listings/${widget.listingId}');
+        final listing = ListingResponse.fromJson(resp.data);
+        userId = listing.ownerUserId;
+      } catch (_) {}
+    }
+    if (userId != null) await _loadProfile(userId);
+  }
+
+  Future<void> _loadProfile(int userId) async {
+    setState(() => _loadingProfile = true);
+    try {
+      final resp = await apiClient.dio.get('/users/$userId/public');
+      if (mounted) setState(() => _profile = PublicUserProfile.fromJson(resp.data));
+    } catch (_) {}
+    if (mounted) setState(() => _loadingProfile = false);
+  }
+
+  Future<void> _loadListings() async {
+    if (widget.vendorName.trim().isEmpty) return;
+    setState(() => _loadingListings = true);
+    try {
+      // Use nearby feed (MUST campus centre) and filter client-side by ownerFullName,
+      // since the search endpoint does full-text on listing *content*, not seller name.
+      final resp = await apiClient.dio.get('/listings/nearby', queryParameters: {
+        'lat': -0.6089,
+        'lng': 30.6570,
+        'radiusKm': 10.0,
+        'size': 50,
+      });
+      final page = ListingPage.fromJson(resp.data);
+      final name = widget.vendorName.trim().toLowerCase();
+      final vendorListings = page.items
+          .where((item) => item.ownerFullName?.trim().toLowerCase() == name)
+          .take(6)
+          .toList();
+      if (mounted) setState(() => _listings = vendorListings);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingListings = false);
+  }
+
+  String _formatMemberSince(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.year}';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final campus = zoneLabel(
+        null, null,
+        fallback: (_profile?.campus?.isNotEmpty == true)
+            ? _profile!.campus!
+            : widget.primaryLocation,
+      );
+    final memberSince = _profile != null
+        ? _formatMemberSince(_profile!.memberSince)
+        : null;
+    final activeCount = _profile?.activeListingsCount;
+
     return Scaffold(
       backgroundColor: AppColors.lightGray,
       appBar: AppBar(
@@ -62,9 +144,24 @@ class VendorProfileScreen extends StatelessWidget {
                           children: [
                             CircleAvatar(
                               radius: 60,
-                              backgroundImage: NetworkImage(vendorAvatar),
+                              backgroundColor: AppColors.darkGray,
+                              backgroundImage: widget.vendorAvatar != null
+                                  ? NetworkImage(widget.vendorAvatar!) as ImageProvider
+                                  : null,
+                              child: widget.vendorAvatar == null
+                                  ? Text(
+                                      widget.vendorName.isNotEmpty
+                                          ? widget.vendorName[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                        color: AppColors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 40,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                            if (isOnline)
+                            if (widget.isOnline)
                               Positioned(
                                 bottom: 4,
                                 right: 4,
@@ -85,7 +182,7 @@ class VendorProfileScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          vendorName,
+                          widget.vendorName,
                           style: TextStyle(
                             color: AppColors.darkGray,
                             fontSize: 24,
@@ -96,28 +193,41 @@ class VendorProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  // Location zone
+                  if (campus.isNotEmpty)
+                    _buildInfoRow(Icons.location_on_outlined, campus),
                   const SizedBox(height: 32),
                   // Verified Credentials Cards
-                  _buildCredentialCard(
-                    icon: Icons.location_on,
-                    title: primaryLocation,
-                    subtitle: 'Primary Location',
-                    isVerified: false,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildCredentialCard(
-                    icon: Icons.badge_outlined,
-                    title: registrationNumber,
-                    subtitle: 'Reg Number',
-                    isVerified: false,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildCredentialCard(
-                    icon: Icons.verified_user,
-                    title: email,
-                    subtitle: 'Email (University verified)',
-                    isVerified: true,
-                  ),
+                  if (_loadingProfile)
+                    const SizedBox.shrink()
+                  else ...[
+                    if (campus.isNotEmpty)
+                      _buildCredentialCard(
+                        icon: Icons.location_on,
+                        title: campus,
+                        subtitle: 'Campus Location',
+                        isVerified: false,
+                      ),
+                    if (memberSince != null) ...[
+                      const SizedBox(height: 12),
+                      _buildCredentialCard(
+                        icon: Icons.calendar_today_outlined,
+                        title: 'Since $memberSince',
+                        subtitle: 'Member Since',
+                        isVerified: false,
+                      ),
+                    ],
+                    if (activeCount != null) ...[
+                      const SizedBox(height: 12),
+                      _buildCredentialCard(
+                        icon: Icons.storefront_outlined,
+                        title: '$activeCount active listing${activeCount == 1 ? '' : 's'}',
+                        subtitle: 'Verified Campus Seller',
+                        isVerified: true,
+                      ),
+                    ],
+                  ],
                   const SizedBox(height: 32),
                   // Items for Sale Section
                   Text(
@@ -129,17 +239,25 @@ class VendorProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildProductTile(
-                    title: 'Cotton Linen Shirt',
-                    price: 25000,
-                    imageUrl: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProductTile(
-                    title: '1TB External Hard Drive',
-                    price: 180000,
-                    imageUrl: 'https://images.unsplash.com/photo-1531492746076-161ca9bcad58?w=400',
-                  ),
+                  if (_loadingListings)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_listings.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No active listings',
+                          style: TextStyle(color: AppColors.mediumGray),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._listings.map(
+                      (listing) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildListingTile(listing),
+                      ),
+                    ),
                   const SizedBox(height: 100), // Space for fixed button
                 ],
               ),
@@ -163,17 +281,24 @@ class VendorProfileScreen extends StatelessWidget {
                 ],
               ),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => InboxScreen(
-                        userName: vendorName,
-                        avatarUrl: vendorAvatar,
-                        isOnline: isOnline,
+                onPressed: () async {
+                  final id = widget.listingId;
+                  if (id == null) return;
+                  try {
+                    final resp = await apiClient.dio.post('/conversations', data: {'listingId': id});
+                    final conv = ConversationResponse.fromJson(resp.data);
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => InboxScreen(
+                          conversationId: conv.id,
+                          userName: widget.vendorName,
+                          isOnline: widget.isOnline,
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } catch (_) {}
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.teal,
@@ -196,6 +321,39 @@ class VendorProfileScreen extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.teal, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.darkGray,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -279,11 +437,7 @@ class VendorProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProductTile({
-    required String title,
-    required int price,
-    required String imageUrl,
-  }) {
+  Widget _buildListingTile(ListingCardResponse listing) {
     return Builder(
       builder: (context) => GestureDetector(
         onTap: () {
@@ -291,16 +445,14 @@ class VendorProfileScreen extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => ProductDetailsScreen(
-                productTitle: title,
-                productDescription:
-                    'This is a high-quality product in excellent condition. Perfect for daily use. Comes with all original accessories and packaging. Well maintained and carefully used.',
-                price: price,
-                imageUrl: imageUrl,
-                vendorName: vendorName,
-                vendorLocation: primaryLocation,
-                vendorAvatar: vendorAvatar,
-                vendorRating: 4.8,
-                isVerified: true,
+                listingId: listing.id,
+                productTitle: listing.title,
+                productDescription: listing.description ?? '',
+                price: listing.priceUgx,
+                imageUrl: listing.primaryImageUrl,
+                vendorName: widget.vendorName,
+                vendorLocation: listing.locationText ?? listing.campus ?? widget.primaryLocation,
+                vendorAvatar: widget.vendorAvatar,
               ),
             ),
           );
@@ -320,72 +472,87 @@ class VendorProfileScreen extends StatelessWidget {
           ),
           child: Row(
             children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.network(
-              imageUrl,
-              width: 70,
-              height: 70,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: AppColors.darkGray,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: listing.primaryImageUrl != null
+                    ? Image.network(
+                        listing.primaryImageUrl!,
+                        width: 70,
+                        height: 70,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                      )
+                    : _imagePlaceholder(),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'UGX ${price.toString().replaceAllMapped(
-                            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                            (Match m) => '${m[1]},',
-                          )}',
+                      listing.title,
                       style: TextStyle(
-                        color: AppColors.teal,
-                        fontSize: 16,
+                        color: AppColors.darkGray,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'ACTIVE',
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'UGX ${listing.priceUgx.toString().replaceAllMapped(
+                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                (Match m) => '${m[1]},',
+                              )}',
+                          style: TextStyle(
+                            color: AppColors.teal,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'ACTIVE',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
         ),
       ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: BoxDecoration(
+        color: AppColors.lightGray,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(Icons.image_not_supported, color: AppColors.mediumGray, size: 28),
     );
   }
 }

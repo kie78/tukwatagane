@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
 import 'userProfile.dart';
 import 'productDetails.dart';
 import 'vendorProfile.dart';
 import 'inbox.dart';
 import 'saved.dart';
-import 'config/bookmarks_service.dart';
+
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
+import 'models/models.dart';
+import 'config/campus_zones.dart';
 
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({super.key});
@@ -17,6 +22,55 @@ class BrowseScreen extends StatefulWidget {
 }
 
 class _BrowseScreenState extends State<BrowseScreen> {
+  List<ListingCardResponse> _listings = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeed();
+  }
+
+  Future<void> _loadFeed() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      // Use registered location from profile (collected at sign-up)
+      double lat = -0.5950, lng = 30.5970;
+      try {
+        final profileResp = await apiClient.dio.get('/users/profile');
+        final profile = UserProfile.fromJson(profileResp.data);
+        final loc = profile.registeredLocation ?? profile.alternateLocation;
+        final regLat = loc?.lat;
+        final regLng = loc?.lng;
+        if (regLat != null && regLng != null) {
+          lat = regLat;
+          lng = regLng;
+        }
+      } catch (_) {}
+
+      final resp = await apiClient.dio.get('/listings/feed', queryParameters: {
+        'lat': lat,
+        'lng': lng,
+        'page': 0,
+        'size': 20,
+      });
+      final page = ListingPage.fromJson(resp.data);
+      if (mounted) setState(() => _listings = page.items);
+    } on DioException catch (_) {
+      // silently keep empty list on error
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,64 +123,89 @@ class _BrowseScreenState extends State<BrowseScreen> {
               },
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: AppColors.lightGray,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=5',
-                  ),
-                ),
+                backgroundColor: AppColors.darkGray,
+                child: const Icon(Icons.person_outline, color: AppColors.white, size: 20),
               ),
             ),
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        itemCount: 5,
-        itemBuilder: (context, index) {
-          return ProductCard(
-            productId: 'product_$index',
-            sellerName: index == 0 ? 'Sarah Namukasa' : 'John Doe',
-            sellerAvatar: 'https://i.pravatar.cc/150?img=${index + 1}',
-            timestamp: '${index + 2} hours ago',
-            productTitle: index == 0
-                ? 'Vintage Denim Jacket'
-                : 'Product Item ${index + 1}',
-            price: '${45000 + (index * 5000)}',
-            location: 'Wandegeya • Kampala',
-            imageUrl: 'https://picsum.photos/400/300?random=$index',
-            isNew: index == 0,
-          );
-        },
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _listings.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.storefront_outlined, size: 64, color: AppColors.mediumGray),
+                      const SizedBox(height: 16),
+                      const Text('No listings yet', style: TextStyle(color: AppColors.mediumGray)),
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: _loadFeed,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reload'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadFeed,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    itemCount: _listings.length,
+                    itemBuilder: (context, index) {
+                      final item = _listings[index];
+                      return ProductCard(
+                        listingId: item.id,
+                        productId: item.id.toString(),
+                        sellerName: item.ownerFullName ?? 'Seller',
+                        sellerAvatar: null,
+                        timestamp: _timeAgo(item.createdAt),
+                        productTitle: item.title,
+                        price: item.priceUgx.toString(),
+                        location: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
+                        imageUrl: item.primaryImageUrl,
+                        isNew: DateTime.now().difference(item.createdAt).inDays < 1,
+                        ownerUserId: item.ownerUserId,
+                        description: item.description,
+                      );
+                    },
+                  ),
+                ),
       bottomNavigationBar: const MainNavBar(currentIndex: 0),
     );
   }
 }
 
 class ProductCard extends StatefulWidget {
+  final int listingId;
   final String productId;
   final String sellerName;
-  final String sellerAvatar;
+  final String? sellerAvatar;
   final String timestamp;
   final String productTitle;
   final String price;
   final String location;
-  final String imageUrl;
+  final String? imageUrl;
   final bool isNew;
+  final int? ownerUserId;
+  final String? description;
 
   const ProductCard({
     super.key,
+    required this.listingId,
     required this.productId,
     required this.sellerName,
-    required this.sellerAvatar,
+    this.sellerAvatar,
     required this.timestamp,
     required this.productTitle,
     required this.price,
     required this.location,
-    required this.imageUrl,
+    this.imageUrl,
     this.isNew = false,
+    this.ownerUserId,
+    this.description,
   });
 
   @override
@@ -134,30 +213,22 @@ class ProductCard extends StatefulWidget {
 }
 
 class _ProductCardState extends State<ProductCard> {
-  final BookmarksService _bookmarksService = BookmarksService();
-  late bool _isBookmarked;
+  bool _isBookmarked = false;
+  int? _myUserId;
 
   @override
   void initState() {
     super.initState();
-    _isBookmarked = _bookmarksService.isBookmarked(widget.productId);
+    authService.getUserId().then((id) {
+      if (mounted) setState(() => _myUserId = id);
+    });
   }
 
-  void _toggleBookmark() {
-    setState(() {
-      _bookmarksService.toggleBookmark(widget.productId);
-      _isBookmarked = _bookmarksService.isBookmarked(widget.productId);
-    });
+  bool get _isOwnListing =>
+      _myUserId != null && widget.ownerUserId != null && _myUserId == widget.ownerUserId;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isBookmarked ? 'Added to bookmarks' : 'Removed from bookmarks',
-        ),
-        backgroundColor: _isBookmarked ? AppColors.teal : AppColors.mediumGray,
-        duration: const Duration(seconds: 1),
-      ),
-    );
+  void _toggleBookmark() {
+    setState(() => _isBookmarked = !_isBookmarked);
   }
 
   void _shareProduct() async {
@@ -196,16 +267,14 @@ Check out this item on Tukwatagane!
           context,
           MaterialPageRoute(
             builder: (context) => ProductDetailsScreen(
+              listingId: widget.listingId,
               productTitle: widget.productTitle,
-              productDescription:
-                  'This is a high-quality product in excellent condition. Perfect for daily use. Comes with all original accessories and packaging. Well maintained and carefully used.',
+              productDescription: widget.description ?? '',
               price: int.parse(widget.price.replaceAll(',', '')),
               imageUrl: widget.imageUrl,
               vendorName: widget.sellerName,
               vendorLocation: widget.location,
               vendorAvatar: widget.sellerAvatar,
-              vendorRating: 4.8,
-              isVerified: true,
             ),
           ),
         );
@@ -239,14 +308,30 @@ Check out this item on Tukwatagane!
                         builder: (context) => VendorProfileScreen(
                           vendorName: widget.sellerName,
                           vendorAvatar: widget.sellerAvatar,
+                          listingId: widget.listingId,
                         ),
                       ),
                     );
                   },
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundImage: NetworkImage(widget.sellerAvatar),
-                  ),
+                  child: widget.sellerAvatar != null
+                      ? CircleAvatar(
+                          radius: 20,
+                          backgroundImage: NetworkImage(widget.sellerAvatar!),
+                        )
+                      : CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppColors.darkGray,
+                          child: Text(
+                            widget.sellerName.isNotEmpty
+                                ? widget.sellerName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: AppColors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -281,12 +366,40 @@ Check out this item on Tukwatagane!
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    widget.imageUrl,
-                    height: 250,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
+                  child: widget.imageUrl != null
+                      ? Image.network(
+                          widget.imageUrl!,
+                          height: 250,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 250,
+                            width: double.infinity,
+                            color: AppColors.lightGray,
+                            child: const Center(
+                              child: Icon(
+                                Icons.image_not_supported_outlined,
+                                color: AppColors.mediumGray,
+                                size: 64,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Container(
+                          height: 250,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AppColors.lightGray,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              color: AppColors.mediumGray,
+                              size: 64,
+                            ),
+                          ),
+                        ),
                 ),
                 if (widget.isNew)
                   Positioned(
@@ -357,24 +470,34 @@ Check out this item on Tukwatagane!
                 ),
                 const SizedBox(height: 16),
                 // Action Buttons
+                if (!_isOwnListing)
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => InboxScreen(
-                                userName: widget.sellerName,
-                                avatarUrl: widget.sellerAvatar,
-                                isOnline: true,
-                                productTitle: widget.productTitle,
-                                productImage: widget.imageUrl,
-                                productPrice: int.parse(widget.price.replaceAll(',', '')),
+                        onPressed: () async {
+                          try {
+                            final resp = await apiClient.dio.post(
+                              '/conversations',
+                              data: {'listingId': widget.listingId},
+                            );
+                            final conv = ConversationResponse.fromJson(resp.data);
+                            if (!context.mounted) return;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => InboxScreen(
+                                  conversationId: conv.id,
+                                  userName: widget.sellerName,
+                                  isOnline: false,
+                                  productTitle: widget.productTitle,
+                                  productImage: widget.imageUrl,
+                                  productPrice: int.parse(widget.price.replaceAll(',', '')),
+                                  productListingId: widget.listingId,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          } catch (_) {}
                         },
                         icon: const Icon(
                           Icons.message,

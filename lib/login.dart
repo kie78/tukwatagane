@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
 import 'browse.dart';
 import 'signup.dart';
 import 'forgotPassword.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
+import 'core/api_exception.dart';
+import 'models/models.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +20,54 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email and password.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final resp = await apiClient.dio.post('/auth/login', data: {
+        'email': email,
+        'password': password,
+      });
+      final auth = AuthResponse.fromJson(resp.data);
+      await apiClient.saveToken(auth.token);
+      await authService.saveSession(
+        token: auth.token,
+        userId: auth.user.id,
+        email: auth.user.email,
+        fullName: auth.user.fullName,
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const BrowseScreen()),
+      );
+    } on DioException catch (e) {
+      final ex = ApiException.fromDio(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ex.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -205,14 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 280,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BrowseScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,
@@ -221,13 +267,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        'Login',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Login',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ),

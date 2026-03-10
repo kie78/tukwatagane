@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 import 'dart:io';
 import 'main.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'models/models.dart';
+import 'config/campus_zones.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -15,6 +19,29 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final ImagePicker _picker = ImagePicker();
   XFile? _profileImage;
+  bool _isUploadingAvatar = false;
+  UserProfile? _profile;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final resp = await apiClient.dio.get('/users/profile');
+      if (mounted) {
+        setState(() {
+          _profile = UserProfile.fromJson(resp.data);
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   Future<void> _pickProfileImage() async {
     try {
@@ -24,18 +51,69 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         maxHeight: 1024,
         imageQuality: 85,
       );
-      if (image != null) {
-        setState(() {
-          _profileImage = image;
+      if (image == null) return;
+
+      // Show local preview immediately while uploading
+      setState(() {
+        _profileImage = image;
+        _isUploadingAvatar = true;
+      });
+
+      // Step 1: get a signed upload token from the backend.
+      // The signature endpoint requires a non-null listingId; we pass the
+      // user's own id as a workaround since there is no dedicated avatar
+      // upload endpoint yet. The folder param controls the Cloudinary path.
+      late CloudinarySignatureResponse sig;
+      try {
+        final sigResp = await apiClient.dio.post('/uploads/cloudinary/signature', data: {
+          'listingId': _profile!.id,
+          'folder': 'campusplug/users/${_profile!.id}/avatar',
         });
+        sig = CloudinarySignatureResponse.fromJson(sigResp.data);
+      } on DioException catch (e) {
+        throw Exception('Step 1 (signature) failed ${e.response?.statusCode}: ${e.response?.data}');
       }
+
+      // Step 2: upload directly to Cloudinary
+      late String secureUrl;
+      try {
+        final formData = FormData.fromMap({
+          'file': await MultipartFile.fromFile(image.path, filename: image.name),
+          'api_key': sig.apiKey,
+          'timestamp': sig.timestamp.toString(),
+          'signature': sig.signature,
+          ...sig.params,
+        });
+        final cloudinaryUrl =
+            'https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload';
+        final cloudResp = await Dio().post(cloudinaryUrl, data: formData);
+        secureUrl = (cloudResp.data as Map<String, dynamic>)['secure_url'] as String;
+      } on DioException catch (e) {
+        throw Exception('Step 2 (Cloudinary upload) failed ${e.response?.statusCode}: ${e.response?.data}');
+      }
+
+      // Step 3: persist the URL on the user's profile
+      try {
+        await apiClient.dio.put('/users/profile', data: {'avatarUrl': secureUrl});
+      } on DioException catch (e) {
+        throw Exception('Step 3 (save to profile) failed ${e.response?.statusCode}: ${e.response?.data}');
+      }
+
+      // Step 4: reload profile so the URL is live
+      await _loadProfile();
+      if (mounted) setState(() => _profileImage = null);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
 
@@ -44,8 +122,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     super.dispose();
   }
 
+  String get _locationLabel {
+    final loc = _profile?.registeredLocation ?? _profile?.alternateLocation;
+    final fallback = loc?.label ?? _profile?.campus ?? '—';
+    return zoneLabel(loc?.lat, loc?.lng, fallback: fallback);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.lightGray,
       appBar: AppBar(
@@ -81,18 +170,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               );
             },
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.mediumGray,
-              child: Icon(
-                Icons.person_outline,
-                color: AppColors.white,
-                size: 20,
-              ),
-            ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -127,11 +204,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                     child: CircleAvatar(
                       radius: 58,
+                      backgroundColor: AppColors.darkGray,
                       backgroundImage: _profileImage != null
-                          ? FileImage(File(_profileImage!.path))
-                          : NetworkImage(
-                              'https://i.pravatar.cc/150?img=12',
-                            ) as ImageProvider,
+                          ? FileImage(File(_profileImage!.path)) as ImageProvider
+                          : (_profile?.avatarUrl != null
+                              ? NetworkImage(_profile!.avatarUrl!) as ImageProvider
+                              : null),
+                      child: _isUploadingAvatar
+                          ? const CircularProgressIndicator(
+                              color: AppColors.white,
+                              strokeWidth: 3,
+                            )
+                          : (_profileImage == null && _profile?.avatarUrl == null
+                              ? Text(
+                                  (_profile?.fullName.isNotEmpty == true)
+                                      ? _profile!.fullName[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 40,
+                                  ),
+                                )
+                              : null),
                     ),
                   ),
                   Positioned(
@@ -164,7 +259,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Eric Doe',
+                    _profile?.fullName ?? '—',
                     style: TextStyle(
                       color: AppColors.darkGray,
                       fontWeight: FontWeight.bold,
@@ -231,14 +326,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           // REG NO Field
                           _buildLockedField(
                             label: 'REG NO',
-                            value: '2023/BIT/216/PS',
+                            value: _profile?.registrationNumber ?? '—',
                             prefixIcon: Icons.badge,
                           ),
                           const SizedBox(height: 12),
                           // EMAIL Field
                           _buildLockedField(
                             label: 'EMAIL',
-                            value: 'eric@must.ac.ug',
+                            value: _profile?.email ?? '—',
                             prefixIcon: Icons.email,
                           ),
                         ],
@@ -278,21 +373,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           // NAME Field
                           _buildLockedField(
                             label: 'NAME',
-                            value: 'Eric Doe',
+                            value: _profile?.fullName ?? '—',
                             prefixIcon: Icons.person,
                           ),
                           const SizedBox(height: 12),
                           // TEL Field
                           _buildLockedField(
                             label: 'TEL',
-                            value: '0771234567',
+                            value: _profile?.phoneNumber ?? '—',
                             prefixIcon: Icons.phone,
                           ),
                           const SizedBox(height: 12),
                           // REGISTERED LOCATION Field
                           _buildLockedField(
                             label: 'REGISTERED LOCATION',
-                            value: 'Kihumuro Campus',
+                            value: _locationLabel,
                             prefixIcon: Icons.location_on,
                           ),
                         ],

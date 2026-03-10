@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'main.dart';
-import 'userProfile.dart';
 import 'saved.dart';
+import 'productDetails.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'models/models.dart';
+import 'config/campus_zones.dart';
 
 class CategoryListingsScreen extends StatefulWidget {
   final String categoryName;
+  final String? categoryCode;
   final bool hasListings;
 
   const CategoryListingsScreen({
     super.key,
     required this.categoryName,
+    this.categoryCode,
     this.hasListings = false,
   });
 
@@ -19,7 +26,59 @@ class CategoryListingsScreen extends StatefulWidget {
 }
 
 class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
-  bool _isMapView = true;
+  List<ListingCardResponse> _listings = [];
+  bool _isLoading = true;
+  bool _showMap = true;
+  ListingCardResponse? _selectedMarkerItem;
+  LatLng? _userLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      // Use registered location from profile (collected at sign-up)
+      double lat = -0.6089, lng = 30.6570;
+      try {
+        final profileResp = await apiClient.dio.get('/users/profile');
+        final profile = UserProfile.fromJson(profileResp.data);
+        final loc = profile.registeredLocation ?? profile.alternateLocation;
+        final regLat = loc?.lat;
+        final regLng = loc?.lng;
+        if (regLat != null && regLng != null) {
+          lat = regLat;
+          lng = regLng;
+          if (mounted) setState(() => _userLocation = LatLng(lat, lng));
+        }
+      } catch (_) {}
+
+      final resp = await apiClient.dio.get('/listings/nearby', queryParameters: {
+        'lat': lat,
+        'lng': lng,
+        'radiusKm': 50.0,
+        if (widget.categoryCode != null) 'categoryCode': widget.categoryCode,
+        'page': 0,
+        'size': 50,
+      });
+      final page = ListingPage.fromJson(resp.data);
+      if (mounted) setState(() => _listings = page.items);
+    } on DioException catch (e) {
+      debugPrint('CategoryListings load error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,201 +121,293 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
               );
             },
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _listings.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.inbox_outlined, size: 64, color: AppColors.mediumGray),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No listings in ${widget.categoryName}',
+                        style: const TextStyle(color: AppColors.mediumGray),
+                      ),
+                    ],
                   ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.lightGray,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=5',
+                )
+              : _showMap ? _buildMapView() : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _listings.length,
+                    itemBuilder: (context, index) {
+                      final item = _listings[index];
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProductDetailsScreen(
+                                listingId: item.id,
+                                productTitle: item.title,
+                                productDescription: item.description ?? '',
+                                price: item.priceUgx,
+                                imageUrl: item.primaryImageUrl,
+                                vendorName: item.ownerFullName ?? '',
+                                vendorLocation: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: item.primaryImageUrl != null
+                                  ? Image.network(
+                                      item.primaryImageUrl!,
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      width: 80,
+                                      height: 80,
+                                      color: AppColors.lightGray,
+                                      child: const Icon(
+                                        Icons.image_not_supported_outlined,
+                                        color: AppColors.mediumGray,
+                                        size: 28,
+                                      ),
+                                    ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.title,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.darkGray)),
+                                    const SizedBox(height: 4),
+                                    Text('UGX ${item.priceUgx}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.darkGray)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.mediumGray),
+                                    ),
+                                    Text(_timeAgo(item.createdAt),
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.mediumGray)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          _buildMapPlaceholder(),
-          Positioned(
-            bottom: 16,
-            left: 0,
-            right: 0,
-            child: _buildViewToggle(),
-          ),
-        ],
-      ),
+      floatingActionButton: !_isLoading && _listings.isNotEmpty
+          ? _buildTogglePill()
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: const MainNavBar(currentIndex: 1),
     );
   }
 
-  Widget _buildMapPlaceholder() {
-    return Container(
-      color: AppColors.lightGray,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(
-                _isMapView ? Icons.map_outlined : Icons.list_alt,
-                size: 80,
-                color: AppColors.teal,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              _isMapView ? 'Map View' : 'List View',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.darkGray,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'No listings found in ${widget.categoryName}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.mediumGray,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Text(
-                'Maps API Integration Point',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.mediumGray,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildViewToggle() {
-    return Center(
+  Widget _buildTogglePill() {
+    return GestureDetector(
+      onTap: () => setState(() {
+        _showMap = !_showMap;
+        _selectedMarkerItem = null;
+      }),
       child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(30),
+          color: AppColors.darkGray,
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildToggleButton(
-                icon: Icons.map,
-                label: 'Map View',
-                isActive: _isMapView,
-                onTap: () {
-                  setState(() {
-                    _isMapView = true;
-                  });
-                },
-              ),
-              _buildToggleButton(
-                icon: Icons.list,
-                label: 'List View',
-                isActive: !_isMapView,
-                onTap: () {
-                  setState(() {
-                    _isMapView = false;
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleButton({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.teal : Colors.transparent,
-          borderRadius: BorderRadius.circular(25),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              icon,
-              color: isActive ? AppColors.white : AppColors.mediumGray,
-              size: 20,
+              _showMap ? Icons.list : Icons.map_outlined,
+              color: AppColors.white,
+              size: 18,
             ),
             const SizedBox(width: 8),
             Text(
-              label,
-              style: TextStyle(
-                color: isActive ? AppColors.white : AppColors.mediumGray,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+              _showMap ? 'List View' : 'Map View',
+              style: const TextStyle(
+                color: AppColors.white,
                 fontSize: 14,
+                fontWeight: FontWeight.bold,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static const _campusCenter = LatLng(-0.6089, 30.6570);
+
+  Widget _buildMapView() {
+    final listingMarkers = _listings
+        .where((item) => item.lat != null && item.lng != null)
+        .map((item) => Marker(
+              markerId: MarkerId(item.id.toString()),
+              position: LatLng(item.lat!, item.lng!),
+              onTap: () => setState(() => _selectedMarkerItem = item),
+            ))
+        .toSet();
+
+    final allMarkers = <Marker>{
+      ...listingMarkers,
+      if (_userLocation != null)
+        Marker(
+          markerId: const MarkerId('_user'),
+          position: _userLocation!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: const InfoWindow(title: 'You are here'),
+        ),
+    };
+
+    final cameraTarget = _userLocation ?? _campusCenter;
+
+    return Stack(
+      children: [
+        GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: cameraTarget,
+            zoom: 15.5,
+          ),
+          markers: allMarkers,
+          polygons: buildZonePolygons(),
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: true,
+          onTap: (_) => setState(() => _selectedMarkerItem = null),
+        ),
+        Positioned(
+          top: 8,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_listings.length} listing${_listings.length == 1 ? '' : 's'} in ${widget.categoryName}',
+                style: const TextStyle(fontSize: 12, color: AppColors.mediumGray),
+              ),
+            ),
+          ),
+        ),
+        if (_selectedMarkerItem != null)
+          Positioned(
+            bottom: 80,
+            left: 16,
+            right: 16,
+            child: _buildMarkerCard(_selectedMarkerItem!),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMarkerCard(ListingCardResponse item) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductDetailsScreen(
+              listingId: item.id,
+              productTitle: item.title,
+              productDescription: item.description ?? '',
+              price: item.priceUgx,
+              imageUrl: item.primaryImageUrl,
+              vendorName: item.ownerFullName ?? '',
+              vendorLocation: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: item.primaryImageUrl != null
+                  ? Image.network(item.primaryImageUrl!, width: 64, height: 64, fit: BoxFit.cover)
+                  : Container(
+                      width: 64,
+                      height: 64,
+                      color: AppColors.lightGray,
+                      child: const Icon(Icons.image_not_supported_outlined, color: AppColors.mediumGray),
+                    ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkGray),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'UGX ${item.priceUgx}',
+                    style: const TextStyle(color: AppColors.darkGray, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.mediumGray),
           ],
         ),
       ),

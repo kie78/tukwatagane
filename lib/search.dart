@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
-import 'userProfile.dart';
 import 'categoryListings.dart';
 import 'searchResults.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'models/models.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -15,6 +17,39 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
+  List<CategoryResponse> _categories = [];
+  bool _isLoadingCategories = false;
+
+  // Fallback image URLs per category code
+  static const _categoryImages = {
+    'ELECTRONICS': 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400',
+    'STATIONERY': 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=400',
+    'BAKERY': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400',
+    'CLOTHING': 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=400',
+    'FAST_FOOD': 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=400',
+    'BEVERAGES': 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400',
+    'HOME': 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400',
+    'BEAUTY': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => _isLoadingCategories = true);
+    try {
+      final resp = await apiClient.dio.get('/categories');
+      final list = (resp.data as List)
+          .map((e) => CategoryResponse.fromJson(e))
+          .toList();
+      if (mounted) setState(() => _categories = list);
+    } on DioException catch (_) {} finally {
+      if (mounted) setState(() => _isLoadingCategories = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -33,49 +68,6 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
   }
-
-  final List<CategoryItem> categories = [
-    CategoryItem(
-      name: 'Electronics',
-      itemCount: '120 Items',
-      imageUrl: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400',
-      badge: 'HOT',
-      badgeColor: AppColors.teal,
-      badgeTextColor: Color(0xFF2D3748),
-    ),
-    CategoryItem(
-      name: 'Baked Goods',
-      itemCount: '200+ Items',
-      imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400',
-      highlightCount: true,
-    ),
-    CategoryItem(
-      name: 'Clothing and Footwear',
-      itemCount: '350 Items',
-      imageUrl: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=400',
-      badge: 'SALE',
-      badgeColor: Colors.white,
-      badgeTextColor: Color(0xFF2D3748),
-    ),
-    CategoryItem(
-      name: 'Fast Food',
-      itemCount: '42 Items',
-      imageUrl: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=400',
-      highlightCount: true,
-    ),
-    CategoryItem(
-      name: 'Drinks and Beverages',
-      itemCount: '60 Items',
-      imageUrl: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400',
-      highlightCount: true,
-    ),
-    CategoryItem(
-      name: 'Jewelry and Accessories',
-      itemCount: '100+ Items',
-      imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400',
-      highlightCount: true,
-    ),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -115,28 +107,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               );
             },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: Color(0xFFD4C5B9),
-                child: Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -196,8 +166,15 @@ class _SearchScreenState extends State<SearchScreen> {
           // Category Grid
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            sliver: _isLoadingCategories
+                ? const SliverToBoxAdapter(
+                    child: Center(
+                      heightFactor: 4,
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 childAspectRatio: 0.85,
                 crossAxisSpacing: 16,
@@ -205,22 +182,35 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
+                  final cat = _categories[index];
+                  final imgUrl = cat.coverImageUrl ?? _categoryImages[cat.code];
                   return GestureDetector(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => CategoryListingsScreen(
-                            categoryName: categories[index].name,
-                            hasListings: false,
+                            categoryName: cat.displayName,
+                            categoryCode: cat.code,
+                            hasListings: cat.activeListingCount > 0,
                           ),
                         ),
                       );
                     },
-                    child: CategoryCard(category: categories[index]),
+                    child: CategoryCard(
+                      category: CategoryItem(
+                        name: cat.displayName,
+                        itemCount: '${cat.activeListingCount} Items',
+                        imageUrl: imgUrl,
+                        badge: cat.badge,
+                        badgeColor: cat.badge == 'HOT' ? AppColors.teal : Colors.white,
+                        badgeTextColor: const Color(0xFF2D3748),
+                        highlightCount: cat.activeListingCount > 50,
+                      ),
+                    ),
                   );
                 },
-                childCount: categories.length,
+                childCount: _categories.length,
               ),
             ),
           ),
@@ -234,7 +224,7 @@ class _SearchScreenState extends State<SearchScreen> {
 class CategoryItem {
   final String name;
   final String itemCount;
-  final String imageUrl;
+  final String? imageUrl;
   final String? badge;
   final Color? badgeColor;
   final Color? badgeTextColor;
@@ -243,7 +233,7 @@ class CategoryItem {
   CategoryItem({
     required this.name,
     required this.itemCount,
-    required this.imageUrl,
+    this.imageUrl,
     this.badge,
     this.badgeColor,
     this.badgeTextColor,
@@ -278,20 +268,23 @@ class CategoryCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Background Image
-            Image.network(
-              category.imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: AppColors.mediumGray,
-                  child: Icon(
-                    Icons.image,
-                    color: Colors.white,
-                    size: 48,
+            category.imageUrl != null
+                ? Image.network(
+                    category.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: AppColors.mediumGray,
+                        child: const Icon(Icons.image, color: Colors.white, size: 48),
+                      );
+                    },
+                  )
+                : Container(
+                    color: AppColors.mediumGray,
+                    child: const Center(
+                      child: Icon(Icons.category_outlined, color: Colors.white, size: 48),
+                    ),
                   ),
-                );
-              },
-            ),
             // Dark Gradient Overlay
             Container(
               decoration: BoxDecoration(

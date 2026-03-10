@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'main.dart';
-import 'userProfile.dart';
 import 'sell.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'models/models.dart';
 
 class MyListingsScreen extends StatefulWidget {
   const MyListingsScreen({super.key});
@@ -12,67 +13,51 @@ class MyListingsScreen extends StatefulWidget {
   State<MyListingsScreen> createState() => _MyListingsScreenState();
 }
 
-class _MyListingsScreenState extends State<MyListingsScreen> {
+class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
   String _selectedFilter = 'All';
+  List<ListingResponse> _allListings = [];
+  bool _isLoading = true;
 
-  final List<ListingItem> _allListings = [
-    ListingItem(
-      id: '1',
-      title: 'Vintage Nike Air Max 90',
-      description: 'Rare colorway, excellent condition, size 10',
-      location: 'Kampala',
-      price: 145000,
-      imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
-      status: ListingStatus.active,
-    ),
-    ListingItem(
-      id: '2',
-      title: 'iPhone X',
-      description: '64GB, Space Gray, unlocked, no scratches',
-      location: 'Nakawa',
-      price: 800000,
-      imageUrl: 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=400',
-      status: ListingStatus.sold,
-    ),
-    ListingItem(
-      id: '3',
-      title: 'L-Shaped Sofa Set',
-      description: 'Modern design, gray fabric, 5 seater',
-      location: 'Entebbe',
-      price: 350000,
-      imageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400',
-      status: ListingStatus.deleted,
-    ),
-    ListingItem(
-      id: '4',
-      title: 'MacBook Pro 2019',
-      description: '13-inch, 256GB SSD, 8GB RAM, i5',
-      location: 'Kampala',
-      price: 2500000,
-      imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400',
-      status: ListingStatus.active,
-    ),
-    ListingItem(
-      id: '5',
-      title: 'Canon EOS 80D Camera',
-      description: 'DSLR with 18-55mm lens, excellent condition',
-      location: 'Kampala',
-      price: 1200000,
-      imageUrl: 'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400',
-      status: ListingStatus.sold,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
-  List<ListingItem> get _filteredListings {
-    if (_selectedFilter == 'All') {
-      return _allListings;
-    } else if (_selectedFilter == 'Active') {
-      return _allListings.where((item) => item.status == ListingStatus.active).toList();
-    } else if (_selectedFilter == 'Sold') {
-      return _allListings.where((item) => item.status == ListingStatus.sold).toList();
-    } else if (_selectedFilter == 'Deleted') {
-      return _allListings.where((item) => item.status == ListingStatus.deleted).toList();
-    }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      final resp = await apiClient.dio.get('/listings/my', queryParameters: {'status': 'ALL'});
+      final items = (resp.data['items'] as List)
+          .map((e) => ListingResponse.fromJson(e))
+          .toList();
+      if (mounted) setState(() => _allListings = items);
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  List<ListingResponse> get _filteredListings {
+    if (_selectedFilter == 'All') return _allListings;
+    if (_selectedFilter == 'Active') return _allListings.where((item) => item.status == ListingStatus.ACTIVE).toList();
+    if (_selectedFilter == 'Sold') return _allListings.where((item) => item.status == ListingStatus.SOLD).toList();
+    if (_selectedFilter == 'Deleted') return _allListings.where((item) => item.status == ListingStatus.DELETED).toList();
     return _allListings;
   }
 
@@ -114,29 +99,6 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                 ),
               );
             },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.lightGray,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=47',
-                  ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -190,13 +152,18 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           const SizedBox(height: 16),
           // Listings
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filteredListings.length,
-              itemBuilder: (context, index) {
-                return _buildListingCard(_filteredListings[index]);
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _filteredListings.length,
+                      itemBuilder: (context, index) {
+                        return _buildListingCard(_filteredListings[index]);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -234,7 +201,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     );
   }
 
-  Widget _buildListingCard(ListingItem item) {
+  Widget _buildListingCard(ListingResponse item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -260,12 +227,23 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                 // Thumbnail
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    item.imageUrl,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                  ),
+                  child: item.primaryImageUrl != null
+                    ? Image.network(
+                        item.primaryImageUrl!,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 80,
+                        height: 80,
+                        color: AppColors.lightGray,
+                        child: const Icon(
+                          Icons.image_not_supported_outlined,
+                          color: AppColors.mediumGray,
+                          size: 28,
+                        ),
+                      ),
                 ),
                 const SizedBox(width: 12),
                 // Content
@@ -287,7 +265,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                       const SizedBox(height: 4),
                       // Description
                       Text(
-                        item.description,
+                        item.description ?? '',
                         style: TextStyle(
                           color: AppColors.mediumGray,
                           fontSize: 13,
@@ -306,7 +284,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            item.location,
+                            item.locationText ?? item.campus ?? 'MUST Campus',
                             style: TextStyle(
                               color: AppColors.mediumGray,
                               fontSize: 12,
@@ -317,19 +295,19 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                       const SizedBox(height: 8),
                       // Price
                       Text(
-                        'UGX ${item.price.toString().replaceAllMapped(
+                        'UGX ${item.priceUgx.toString().replaceAllMapped(
                               RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
                               (Match m) => '${m[1]},',
                             )}',
                         style: TextStyle(
-                          color: item.status == ListingStatus.sold
+                          color: item.status == ListingStatus.SOLD
                               ? AppColors.mediumGray
-                              : item.status == ListingStatus.deleted
+                              : item.status == ListingStatus.DELETED
                                   ? Colors.red
                                   : AppColors.teal,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          decoration: item.status == ListingStatus.deleted
+                          decoration: item.status == ListingStatus.DELETED
                               ? TextDecoration.lineThrough
                               : null,
                         ),
@@ -341,7 +319,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
             ),
             const SizedBox(height: 12),
             // Actions Row - Full Width
-            if (item.status == ListingStatus.deleted)
+            if (item.status == ListingStatus.DELETED)
               Row(
                 children: [
                   Expanded(
@@ -353,10 +331,11 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           context: context,
                           title: 'Restore Listing',
                           message: 'Do you want to restore this listing?',
-                          onConfirm: () {
-                            setState(() {
-                              item.status = ListingStatus.active;
-                            });
+                          onConfirm: () async {
+                            try {
+                              await apiClient.dio.post('/listings/${item.id}/restore');
+                              _load();
+                            } catch (_) {}
                           },
                         );
                       },
@@ -374,10 +353,11 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           context: context,
                           title: 'Purge Listing',
                           message: 'This will permanently delete this listing. Continue?',
-                          onConfirm: () {
-                            setState(() {
-                              _allListings.removeWhere((listing) => listing.id == item.id);
-                            });
+                          onConfirm: () async {
+                            try {
+                              await apiClient.dio.post('/listings/${item.id}/purge');
+                              _load();
+                            } catch (_) {}
                           },
                         );
                       },
@@ -418,24 +398,24 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                     child: _buildActionButton(
                       icon: Icons.edit_outlined,
                       label: 'Edit',
-                      onTap: item.status == ListingStatus.sold ? null : () {
+                      onTap: item.status == ListingStatus.SOLD ? null : () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => SellScreen(
-                              editingItemId: item.id,
+                              editingItemId: item.id.toString(),
                               editingTitle: item.title,
-                              editingPrice: item.price.toString(),
-                              editingCategory: null, // You can add category to ListingItem if needed
+                              editingPrice: item.priceUgx.toString(),
+                              editingCategory: null,
                               editingDescription: item.description,
-                              editingLocation: item.location,
-                              editingImageUrl: item.imageUrl,
+                              editingLocation: item.locationText ?? item.campus,
+                              editingImageUrl: item.primaryImageUrl,
                             ),
                           ),
                         );
                       },
                       color: Color(0xFF1976D2),
-                      isDisabled: item.status == ListingStatus.sold,
+                      isDisabled: item.status == ListingStatus.SOLD,
                       hasBorder: true,
                     ),
                   ),
@@ -444,26 +424,27 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                     child: _buildActionButton(
                       icon: Icons.delete_outline,
                       label: 'Delete',
-                      onTap: item.status == ListingStatus.sold
+                      onTap: item.status == ListingStatus.SOLD
                           ? null
                           : () {
                               _showConfirmationDialog(
                                 context: context,
                                 title: 'Delete Listing',
                                 message: 'Are you sure you want to delete this listing?',
-                                onConfirm: () {
-                                  setState(() {
-                                    item.status = ListingStatus.deleted;
-                                  });
+                                onConfirm: () async {
+                                  try {
+                                    await apiClient.dio.post('/listings/${item.id}/delete');
+                                    _load();
+                                  } catch (_) {}
                                 },
                               );
                             },
                       color: Color(0xFFD32F2F),
-                      isDisabled: item.status == ListingStatus.sold,
+                      isDisabled: item.status == ListingStatus.SOLD,
                       hasBorder: true,
                     ),
                   ),
-                  if (item.status == ListingStatus.active) ...[
+                  if (item.status == ListingStatus.ACTIVE) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildActionButton(
@@ -474,10 +455,11 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                             context: context,
                             title: 'Mark as Sold',
                             message: 'Mark this listing as sold?',
-                            onConfirm: () {
-                              setState(() {
-                                item.status = ListingStatus.sold;
-                              });
+                            onConfirm: () async {
+                              try {
+                                await apiClient.dio.post('/listings/${item.id}/sold');
+                                _load();
+                              } catch (_) {}
                             },
                           );
                         },
@@ -495,18 +477,18 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: item.status == ListingStatus.active
+                        color: item.status == ListingStatus.ACTIVE
                             ? Color(0xFFE8F5E9)
                             : Color(0xFFF5F5F5),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Center(
                         child: Text(
-                          item.status == ListingStatus.active
+                          item.status == ListingStatus.ACTIVE
                               ? 'ACTIVE'
                               : 'SOLD',
                           style: TextStyle(
-                            color: item.status == ListingStatus.active
+                            color: item.status == ListingStatus.ACTIVE
                                 ? Color(0xFF2E7D32)
                                 : AppColors.mediumGray,
                             fontSize: 11,
@@ -655,28 +637,3 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
   }
 }
 
-enum ListingStatus {
-  active,
-  sold,
-  deleted,
-}
-
-class ListingItem {
-  final String id;
-  final String title;
-  final String description;
-  final String location;
-  final int price;
-  final String imageUrl;
-  ListingStatus status;
-
-  ListingItem({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.location,
-    required this.price,
-    required this.imageUrl,
-    required this.status,
-  });
-}

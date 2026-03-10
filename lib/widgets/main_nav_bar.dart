@@ -19,6 +19,14 @@ class MainNavBar extends StatelessWidget {
     return BottomNavigationBar(
       currentIndex: currentIndex,
       onTap: (index) {
+        if (index == 4) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/account',
+            (route) => false,
+          );
+          return;
+        }
         if (index == currentIndex) return;
         Navigator.pushReplacementNamed(context, _routes[index]);
       },
@@ -56,9 +64,9 @@ class MainNavBar extends StatelessWidget {
           activeIcon: const Icon(Icons.add_circle, color: AppColors.teal),
           label: 'Sell',
         ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_outline),
-          activeIcon: Icon(Icons.chat_bubble),
+        BottomNavigationBarItem(
+          icon: const _ChatIcon(active: false),
+          activeIcon: const _ChatIcon(active: true),
           label: 'Chat',
         ),
         const BottomNavigationBarItem(
@@ -67,6 +75,39 @@ class MainNavBar extends StatelessWidget {
           label: 'Account',
         ),
       ],
+    );
+  }
+}
+
+class _ChatIcon extends StatelessWidget {
+  final bool active;
+  const _ChatIcon({required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: unreadNotifier,
+      builder: (context, count, _) {
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(active ? Icons.chat_bubble : Icons.chat_bubble_outline),
+            if (count > 0)
+              Positioned(
+                top: -3,
+                right: -3,
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

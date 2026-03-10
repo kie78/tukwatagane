@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'main.dart';
-import 'userProfile.dart';
 import 'productDetails.dart';
 import 'inbox.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
+import 'models/models.dart';
 
 class SavedScreen extends StatefulWidget {
   const SavedScreen({super.key});
@@ -12,41 +14,78 @@ class SavedScreen extends StatefulWidget {
   State<SavedScreen> createState() => _SavedScreenState();
 }
 
-class _SavedScreenState extends State<SavedScreen> {
-  final List<SavedItem> _savedItems = [
-    SavedItem(
-      id: '1',
-      title: 'iPhone 12 Pro Max',
-      price: 2500000,
-      location: 'Kihumuro Campus',
-      distance: '300m',
-      imageUrl: 'https://images.unsplash.com/photo-1591337676887-a217a6970a8a?w=400',
-      isAvailable: true,
-    ),
-    SavedItem(
-      id: '2',
-      title: 'Engineering Mathematics',
-      price: 50000,
-      location: 'Main Library',
-      distance: '150m',
-      imageUrl: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400',
-      isAvailable: false,
-    ),
-    SavedItem(
-      id: '4',
-      title: 'Smart Watch Series 6',
-      price: 850000,
-      location: 'Kihumuro Campus',
-      distance: '200m',
-      imageUrl: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400',
-      isAvailable: true,
-    ),
-  ];
+class _SavedScreenState extends State<SavedScreen> with RouteAware {
+  List<BookmarkCardResponse> _savedItems = [];
+  bool _isLoading = true;
+  int? _myUserId;
 
-  void _removeItem(String id) {
-    setState(() {
-      _savedItems.removeWhere((item) => item.id == id);
+  @override
+  void initState() {
+    super.initState();
+    _loadBookmarks();
+    authService.getUserId().then((id) {
+      if (mounted) setState(() => _myUserId = id);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    _loadBookmarks();
+  }
+
+  Future<void> _loadBookmarks() async {
+    setState(() => _isLoading = true);
+    try {
+      final resp = await apiClient.dio.get('/bookmarks', queryParameters: {'page': 0, 'size': 50});
+      final items = (resp.data['items'] as List)
+          .map((e) => BookmarkCardResponse.fromJson(e))
+          .toList();
+      if (mounted) setState(() => _savedItems = items);
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _removeItem(int listingId) async {
+    try {
+      await apiClient.dio.delete('/bookmarks', queryParameters: {'listingId': listingId});
+      if (mounted) {
+        setState(() => _savedItems.removeWhere((item) => item.id == listingId));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _startChat(BookmarkCardResponse item) async {
+    try {
+      final resp = await apiClient.dio.post('/conversations', data: {'listingId': item.id});
+      final conv = ConversationResponse.fromJson(resp.data);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => InboxScreen(
+            conversationId: conv.id,
+            userName: 'Seller',
+            isOnline: false,
+            productTitle: item.title,
+            productImage: item.primaryImageUrl,
+            productPrice: item.priceUgx,
+            productListingId: item.id,
+          ),
+        ),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -80,29 +119,6 @@ class _SavedScreenState extends State<SavedScreen> {
               color: AppColors.mediumGray,
             ),
             onPressed: () {},
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.lightGray,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=12',
-                  ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -154,7 +170,9 @@ class _SavedScreenState extends State<SavedScreen> {
           ),
           // Saved Items List
           Expanded(
-            child: _savedItems.isEmpty
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _savedItems.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -162,7 +180,7 @@ class _SavedScreenState extends State<SavedScreen> {
                         Icon(
                           Icons.bookmark_border,
                           size: 80,
-                          color: AppColors.mediumGray.withOpacity(0.5),
+                          color: AppColors.mediumGray.withValues(alpha: 0.5),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -184,12 +202,15 @@ class _SavedScreenState extends State<SavedScreen> {
                       ],
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _savedItems.length,
-                    itemBuilder: (context, index) {
-                      return _buildSavedItemCard(_savedItems[index]);
-                    },
+                : RefreshIndicator(
+                    onRefresh: _loadBookmarks,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _savedItems.length,
+                      itemBuilder: (context, index) {
+                        return _buildSavedItemCard(_savedItems[index]);
+                      },
+                    ),
                   ),
           ),
         ],
@@ -198,23 +219,21 @@ class _SavedScreenState extends State<SavedScreen> {
     );
   }
 
-  Widget _buildSavedItemCard(SavedItem item) {
+  Widget _buildSavedItemCard(BookmarkCardResponse item) {
+    final isAvailable = item.status == 'ACTIVE';
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ProductDetailsScreen(
+              listingId: item.id,
               productTitle: item.title,
-              productDescription:
-                  'This is a high-quality product in excellent condition. Perfect for daily use. Comes with all original accessories and packaging. Well maintained and carefully used.',
-              price: item.price,
-              imageUrl: item.imageUrl,
-              vendorName: 'Local Vendor',
-              vendorLocation: item.location,
-              vendorAvatar: 'https://i.pravatar.cc/150?img=25',
-              vendorRating: 4.8,
-              isVerified: true,
+              productDescription: item.description ?? '',
+              price: item.priceUgx,
+              imageUrl: item.primaryImageUrl,
+              vendorName: '',
+              vendorLocation: item.campus ?? item.locationText ?? '',
             ),
           ),
         );
@@ -226,7 +245,7 @@ class _SavedScreenState extends State<SavedScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -244,12 +263,23 @@ class _SavedScreenState extends State<SavedScreen> {
                 // Thumbnail
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    item.imageUrl,
-                    width: 100,
-                    height: 100,
-                    fit: BoxFit.cover,
-                  ),
+                  child: item.primaryImageUrl != null
+                    ? Image.network(
+                        item.primaryImageUrl!,
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 100,
+                        height: 100,
+                        color: AppColors.lightGray,
+                        child: const Icon(
+                          Icons.image_not_supported_outlined,
+                          color: AppColors.mediumGray,
+                          size: 36,
+                        ),
+                      ),
                 ),
                 const SizedBox(width: 12),
                 // Content
@@ -271,7 +301,7 @@ class _SavedScreenState extends State<SavedScreen> {
                       const SizedBox(height: 6),
                       // Price
                       Text(
-                        'UGX ${item.price.toString().replaceAllMapped(
+                        'UGX ${item.priceUgx.toString().replaceAllMapped(
                               RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
                               (Match m) => '${m[1]},',
                             )}',
@@ -293,7 +323,7 @@ class _SavedScreenState extends State<SavedScreen> {
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              '${item.location} - ${item.distance}',
+                              item.campus ?? item.locationText ?? 'MUST Campus',
                               style: TextStyle(
                                 color: AppColors.mediumGray,
                                 fontSize: 12,
@@ -354,16 +384,16 @@ class _SavedScreenState extends State<SavedScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: item.isAvailable
+                      color: isAvailable
                           ? Colors.green.shade50
                           : Colors.red.shade50,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
                       child: Text(
-                        item.isAvailable ? 'Available' : 'Sold',
+                        isAvailable ? 'Available' : 'Sold',
                         style: TextStyle(
-                          color: item.isAvailable
+                          color: isAvailable
                               ? Colors.green.shade700
                               : Colors.red.shade700,
                           fontSize: 11,
@@ -375,28 +405,15 @@ class _SavedScreenState extends State<SavedScreen> {
                 ),
                 const SizedBox(width: 8),
                 // Chat Now Button
+                if (_myUserId == null || item.ownerUserId != _myUserId)
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: item.isAvailable ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => InboxScreen(
-                            userName: 'Local Vendor',
-                            avatarUrl: 'https://i.pravatar.cc/150?img=25',
-                            isOnline: true,
-                            productTitle: item.title,
-                            productImage: item.imageUrl,
-                            productPrice: item.price,
-                          ),
-                        ),
-                      );
-                    } : null,
+                    onPressed: isAvailable ? () => _startChat(item) : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: item.isAvailable
+                      backgroundColor: isAvailable
                           ? AppColors.teal
                           : AppColors.lightGray,
-                      foregroundColor: item.isAvailable
+                      foregroundColor: isAvailable
                           ? AppColors.white
                           : AppColors.mediumGray,
                       padding: const EdgeInsets.symmetric(
@@ -411,7 +428,7 @@ class _SavedScreenState extends State<SavedScreen> {
                     icon: Icon(
                       Icons.chat_bubble_outline,
                       size: 16,
-                      color: item.isAvailable
+                      color: isAvailable
                           ? AppColors.white
                           : AppColors.mediumGray,
                     ),
@@ -432,24 +449,4 @@ class _SavedScreenState extends State<SavedScreen> {
     ),
     );
   }
-}
-
-class SavedItem {
-  final String id;
-  final String title;
-  final int price;
-  final String location;
-  final String distance;
-  final String imageUrl;
-  final bool isAvailable;
-
-  SavedItem({
-    required this.id,
-    required this.title,
-    required this.price,
-    required this.location,
-    required this.distance,
-    required this.imageUrl,
-    required this.isAvailable,
-  });
 }

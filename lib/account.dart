@@ -5,6 +5,8 @@ import 'myListings.dart';
 import 'saved.dart';
 import 'login.dart';
 import 'widgets/main_nav_bar.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -14,6 +16,40 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
+  String _userName = '';
+  String _userEmail = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final name = await authService.getUserName();
+    final email = await authService.getUserEmail();
+    if (mounted) {
+      setState(() {
+        _userName = name ?? 'User';
+        _userEmail = email ?? '';
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await apiClient.dio.post('/auth/logout');
+    } catch (_) {}
+    await authService.clearSession();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (_) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,29 +89,6 @@ class _AccountScreenState extends State<AccountScreen> {
               );
             },
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserProfileScreen(),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.lightGray,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=12',
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -94,6 +107,45 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
               ),
             ),
+            if (_userName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: AppColors.darkGray,
+                      child: Text(
+                        _userName[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: AppColors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _userName,
+                          style: const TextStyle(
+                            color: AppColors.darkGray,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (_userEmail.isNotEmpty)
+                          Text(
+                            _userEmail,
+                            style: const TextStyle(color: AppColors.mediumGray, fontSize: 14),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             // Navigation Menu Cards
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -149,14 +201,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     child: SizedBox(
                       width: 200,
                       child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: _logout,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,

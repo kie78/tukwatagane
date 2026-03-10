@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
 import 'login.dart';
+import 'core/api_client.dart';
+import 'core/api_exception.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -25,6 +28,77 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isPasswordVisible = false;
   bool _isCodeSent = false;
   bool _isCodeVerified = false;
+  bool _isLoading = false;
+
+  String get _enteredOtp =>
+      _otpControllers.map((c) => c.text).join();
+
+  Future<void> _handleSendCode() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await apiClient.dio.post('/auth/forgot-password', data: {'email': email});
+      if (!mounted) return;
+      setState(() => _isCodeSent = true);
+    } on DioException catch (e) {
+      final ex = ApiException.fromDio(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _handleVerify() {
+    if (_enteredOtp.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the 5-digit code.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    setState(() => _isCodeVerified = true);
+  }
+
+  Future<void> _handleConfirm() async {
+    final password = _newPasswordController.text;
+    if (password.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await apiClient.dio.post('/auth/reset-password', data: {
+        'email': _emailController.text.trim(),
+        'otp': _enteredOtp,
+        'password': password,
+        'confirmPassword': password,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset successful. Please log in.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    } on DioException catch (e) {
+      final ex = ApiException.fromDio(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -53,29 +127,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     
     final visibleChars = username.substring(0, 2);
     return '$visibleChars***@$domain';
-  }
-
-  void _handleSendCode() {
-    if (_emailController.text.isNotEmpty) {
-      setState(() {
-        _isCodeSent = true;
-      });
-    }
-  }
-
-  void _handleVerify() {
-    setState(() {
-      _isCodeVerified = true;
-    });
-  }
-
-  void _handleConfirm() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const LoginScreen(),
-      ),
-    );
   }
 
   @override
@@ -215,7 +266,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isCodeSent ? null : _handleSendCode,
+                    onPressed: (_isCodeSent || _isLoading) ? null : _handleSendCode,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: AppColors.white,
@@ -226,13 +277,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: Text(
-                      'Send',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _isLoading && !_isCodeSent
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Send',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
                 // Code Sent Section (shown after sending)
@@ -434,7 +494,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _handleConfirm,
+                      onPressed: _isLoading ? null : _handleConfirm,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,
@@ -443,13 +503,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Confirm',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],

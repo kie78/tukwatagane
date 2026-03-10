@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
 import 'main.dart';
 import 'vendorProfile.dart';
+import 'productDetails.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'core/api_client.dart';
+import 'core/auth_service.dart';
+import 'core/stomp_service.dart';
+import 'models/models.dart';
 
 class InboxScreen extends StatefulWidget {
+  final int conversationId;
   final String userName;
   final String? avatarUrl;
   final bool isOnline;
@@ -13,67 +20,131 @@ class InboxScreen extends StatefulWidget {
   final String? productTitle;
   final String? productImage;
   final int? productPrice;
+  final int? productListingId;
+  final int? counterpartUserId;
 
   const InboxScreen({
     super.key,
+    required this.conversationId,
     required this.userName,
     this.avatarUrl,
-    required this.isOnline,
+    this.isOnline = false,
     this.businessName,
     this.initials,
-    this.phoneNumber = '+256700000000',
+    this.phoneNumber,
     this.productTitle,
     this.productImage,
     this.productPrice,
+    this.productListingId,
+    this.counterpartUserId,
   });
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
-class _InboxScreenState extends State<InboxScreen> {
+class _InboxScreenState extends State<InboxScreen> with RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<ChatMessage> _messages = [];
+  List<MessageResponse> _messages = [];
+  int? _myUserId;
+  StompUnsubscribe? _stompUnsub;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    _myUserId = await authService.getUserId();
+    await _loadMessages();
+    _connectStomp();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      final resp = await apiClient.dio.get(
+        '/conversations/${widget.conversationId}/messages',
+        queryParameters: {'limit': 50},
+      );
+      final items = (resp.data['items'] as List)
+          .map((e) => MessageResponse.fromJson(e))
+          .toList();
+      if (mounted) {
+        setState(() => _messages = items);
+        _scrollToBottom();
+      }
+    } catch (_) {}
+  }
+
+  void _connectStomp() async {
+    final token = await apiClient.readToken();
+    if (token == null) return;
+    await stompService.connect(token: token);
+    _stompUnsub = stompService.subscribeToConversation(
+      conversationId: widget.conversationId,
+      onMessage: (msg) {
+        if (mounted) {
+          setState(() => _messages.add(msg));
+          _scrollToBottom();
+          if (msg.senderUserId != _myUserId && unreadNotifier.value > 0) {
+            unreadNotifier.value++;
+          }
+        }
+      },
+    );
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
 
   @override
   void dispose() {
+    routeObserver.unsubscribe(this);
+    _stompUnsub?.call();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isNotEmpty) {
-      setState(() {
-        _messages.add(
-          ChatMessage(
-            text: _messageController.text.trim(),
-            timestamp: _formatCurrentTime(),
-            isOutgoing: true,
-          ),
-        );
-        _messageController.clear();
-      });
-      // Scroll to bottom after sending message
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
+  @override
+  void didPopNext() {
+    _loadMessages();
   }
 
-  String _formatCurrentTime() {
-    final now = DateTime.now();
-    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
-    final minute = now.minute.toString().padLeft(2, '0');
-    final period = now.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    _messageController.clear();
+    try {
+      await apiClient.dio.post(
+        '/conversations/${widget.conversationId}/messages',
+        data: {'body': text},
+      );
+      // STOMP subscription will deliver the message back
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Send failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -100,8 +171,9 @@ class _InboxScreenState extends State<InboxScreen> {
                   MaterialPageRoute(
                     builder: (context) => VendorProfileScreen(
                       vendorName: widget.userName,
-                      vendorAvatar: widget.avatarUrl ?? 'https://i.pravatar.cc/150?img=25',
+                      vendorAvatar: widget.avatarUrl,
                       isOnline: widget.isOnline,
+                      vendorUserId: widget.counterpartUserId,
                     ),
                   ),
                 );
@@ -211,13 +283,13 @@ class _InboxScreenState extends State<InboxScreen> {
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
                             final message = _messages[index];
+                            final isOutgoing = message.senderUserId == _myUserId;
+                            final timeStr = _formatTime(message.createdAt);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
-                              child: _buildOutgoingMessage(
-                                message.text,
-                                message.timestamp,
-                                isDelivered: true,
-                              ),
+                              child: isOutgoing
+                                  ? _buildOutgoingMessage(message.body, timeStr, isDelivered: true)
+                                  : _buildIncomingMessage(message.body, timeStr),
                             );
                           },
                         ),
@@ -296,6 +368,46 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  Widget _buildIncomingMessage(String message, String timestamp) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.lightGray),
+                ),
+                child: Text(
+                  message,
+                  style: const TextStyle(color: AppColors.darkGray, fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                timestamp,
+                style: const TextStyle(color: AppColors.mediumGray, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 48),
+      ],
+    );
+  }
+
   Widget _buildOutgoingMessage(
     String message,
     String timestamp, {
@@ -364,7 +476,7 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Start a conversation with vendor',
+              'Start a conversation with ${widget.userName}',
               style: TextStyle(
                 color: AppColors.darkGray,
                 fontSize: 16,
@@ -372,24 +484,28 @@ class _InboxScreenState extends State<InboxScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Wandegeya • Kampala',
-              style: TextStyle(
-                color: AppColors.mediumGray,
-                fontSize: 14,
+            if (widget.businessName != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                widget.businessName!,
+                style: TextStyle(
+                  color: AppColors.mediumGray,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'vendor@must.ac.ug',
-              style: TextStyle(
-                color: AppColors.mediumGray,
-                fontSize: 14,
+            ],
+            if (widget.phoneNumber != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                widget.phoneNumber!,
+                style: TextStyle(
+                  color: AppColors.mediumGray,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
+            ],
           ],
         ),
       ),
@@ -397,7 +513,23 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Widget _buildProductReferenceCard() {
-    return Container(
+    return GestureDetector(
+      onTap: widget.productListingId != null
+          ? () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ProductDetailsScreen(
+                    listingId: widget.productListingId,
+                    productTitle: widget.productTitle!,
+                    price: widget.productPrice!,
+                    imageUrl: widget.productImage,
+                    vendorName: widget.userName,
+                    vendorLocation: '',
+                  ),
+                ),
+              )
+          : null,
+      child: Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -456,19 +588,8 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
           ),
         ],
-      ),
-    );
+      ),    ),    );
   }
 }
 
-class ChatMessage {
-  final String text;
-  final String timestamp;
-  final bool isOutgoing;
 
-  ChatMessage({
-    required this.text,
-    required this.timestamp,
-    required this.isOutgoing,
-  });
-}

@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'login.dart';
 import 'browse.dart';
+import 'core/auth_service.dart';
 import 'search.dart';
 import 'sell.dart';
 import 'chat.dart';
 import 'account.dart';
 
-void main() {
-  runApp(const MainApp());
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
+
+final ValueNotifier<int> unreadNotifier = ValueNotifier(0);
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final loggedIn = await authService.isLoggedIn();
+  runApp(MainApp(startLoggedIn: loggedIn));
 }
 
 // App Theme Colors
@@ -20,7 +28,8 @@ class AppColors {
 }
 
 class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+  final bool startLoggedIn;
+  const MainApp({super.key, required this.startLoggedIn});
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +48,8 @@ class MainApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      navigatorObservers: [routeObserver],
+      home: startLoggedIn ? const BrowseScreen() : const LoginScreen(),
       routes: {
         '/browse':  (_) => const BrowseScreen(),
         '/search':  (_) => const SearchScreen(),
