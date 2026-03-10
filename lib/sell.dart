@@ -133,10 +133,10 @@ class _SellScreenState extends State<SellScreen> {
   }
 
   Future<void> _pickImage() async {
-    if (_existingImages.length + _selectedImages.length >= 3) {
+    if (_existingImages.length + _selectedImages.length >= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 3 photos allowed'),
+          content: Text('Only 1 photo is allowed'),
           backgroundColor: Colors.red,
         ),
       );
@@ -159,7 +159,7 @@ class _SellScreenState extends State<SellScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Photo added (${_selectedImages.length}/3)'),
+              content: Text('Photo added (${_selectedImages.length}/1)'),
               backgroundColor: AppColors.teal,
               duration: const Duration(seconds: 1),
             ),
@@ -454,7 +454,7 @@ class _SellScreenState extends State<SellScreen> {
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'Upload Photos',
+                        'Upload Photo',
                         style: TextStyle(
                           color: AppColors.darkGray,
                           fontWeight: FontWeight.bold,
@@ -463,7 +463,7 @@ class _SellScreenState extends State<SellScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Add up to 3 photos. Clear details help items sell faster.',
+                        'Add 1 clear photo. Clear details help items sell faster.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: AppColors.mediumGray,
@@ -541,15 +541,13 @@ class _SellScreenState extends State<SellScreen> {
                       ),
                     ],
                     const SizedBox(height: 20),
-                    (_existingImages.length + _selectedImages.length) < 3
+                    (_existingImages.length + _selectedImages.length) < 1
                         ? ElevatedButton.icon(
                             onPressed: _pickImage,
                             icon: const Icon(Icons.add, color: Colors.white),
-                            label: Text(
-                              (_existingImages.isEmpty && _selectedImages.isEmpty)
-                                ? 'Add Photo'
-                                : 'Add More (${_existingImages.length + _selectedImages.length}/3)',
-                              style: const TextStyle(
+                            label: const Text(
+                              'Add Photo',
+                              style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -579,7 +577,7 @@ class _SellScreenState extends State<SellScreen> {
                               ),
                             ),
                             child: const Text(
-                              'Max',
+                              'Max 1 Photo',
                               style: TextStyle(
                                 color: AppColors.mediumGray,
                                 fontWeight: FontWeight.bold,

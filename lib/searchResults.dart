@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -29,12 +30,20 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   bool _showMap = false;
   ListingCardResponse? _selectedMarkerItem;
   LatLng? _userLocation;
+  Set<Marker> _zoneLabelMarkers = {};
 
   @override
   void initState() {
     super.initState();
-    _search();
+    _loadAndLabel();
     _loadUserLocation();
+  }
+
+  Future<void> _loadAndLabel() async {
+    await Future.wait([
+      _search(),
+      _buildZoneLabelMarkers(),
+    ]);
   }
 
   Future<void> _loadUserLocation() async {
@@ -74,6 +83,87 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+
+  Future<BitmapDescriptor> _createZoneLabelBitmap(String label, double pixelRatio) async {
+    // All base values are in logical pixels to match Google Maps label size (~12lp)
+    final double fontSize = 12.0 * pixelRatio;
+    final double paddingH = 8.0 * pixelRatio;
+    final double paddingV = 4.0 * pixelRatio;
+    final double stemLen = 20.0 * pixelRatio;
+    final double dotR = 3.0 * pixelRatio;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: const Color(0xFFFFFFFF),
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    final pillW = textPainter.width + paddingH * 2;
+    final pillH = textPainter.height + paddingV * 2;
+    final totalH = pillH + stemLen + dotR * 2;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..color = const Color(0xCC263238);
+
+    // Pill
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, pillW, pillH), Radius.circular(6 * pixelRatio)),
+      paint,
+    );
+    // Label
+    textPainter.paint(canvas, Offset(paddingH, paddingV));
+    // Stem
+    canvas.drawLine(
+      Offset(pillW / 2, pillH),
+      Offset(pillW / 2, pillH + stemLen),
+      Paint()
+        ..color = const Color(0xCC263238)
+        ..strokeWidth = 1.5 * pixelRatio
+        ..strokeCap = StrokeCap.round,
+    );
+    // Anchor dot
+    canvas.drawCircle(Offset(pillW / 2, pillH + stemLen + dotR), dotR, paint);
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(pillW.ceil(), totalH.ceil());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+  }
+
+  Future<void> _buildZoneLabelMarkers() async {
+    final pixelRatio = WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+    final markers = <Marker>{};
+    for (final zone in campusZones) {
+      // Anchor at the topmost vertex (highest on screen = max latitude)
+      final topVertex = zone.points
+          .reduce((a, b) => a.latitude > b.latitude ? a : b);
+      final shortName = zone.name
+          .replaceAllMapped(
+            RegExp(r'\s+[Zz]one(\s+[A-Z])?\b'),
+            (m) => m.group(1) ?? '',
+          )
+          .trim();
+      final icon = await _createZoneLabelBitmap(shortName, pixelRatio);
+      markers.add(Marker(
+        markerId: MarkerId('zone_label_${zone.tag}'),
+        position: topVertex,
+        icon: icon,
+        flat: false,
+        anchor: const Offset(0.5, 1.0),
+        consumeTapEvents: false,
+        zIndex: 0.5,
+      ));
+    }
+    if (mounted) setState(() => _zoneLabelMarkers = markers);
   }
 
   @override
@@ -291,18 +381,21 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         .map((item) => Marker(
               markerId: MarkerId(item.id.toString()),
               position: LatLng(item.lat!, item.lng!),
+              zIndex: 1.5,
               onTap: () => setState(() => _selectedMarkerItem = item),
             ))
         .toSet();
 
     final allMarkers = <Marker>{
       ...listingMarkers,
+      ..._zoneLabelMarkers,
       if (_userLocation != null)
         Marker(
           markerId: const MarkerId('_user'),
           position: _userLocation!,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           infoWindow: const InfoWindow(title: 'You are here'),
+          zIndex: 2.0,
         ),
     };
 

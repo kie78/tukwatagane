@@ -490,6 +490,8 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 vendorName: widget.vendorName,
                 vendorLocation: listing.locationText ?? listing.campus ?? widget.primaryLocation,
                 vendorAvatar: widget.vendorAvatar,
+                ownerUserIdHint: listing.ownerUserId,
+                isOwnListingHint: _isOwnVendorProfile,
               ),
             ),
           );

@@ -20,6 +20,16 @@ class _SearchScreenState extends State<SearchScreen> {
   List<CategoryResponse> _categories = [];
   bool _isLoadingCategories = false;
 
+  // Keep category labels aligned with SellScreen.
+  static const _sellCategoryLabels = {
+    'ELECTRONICS': 'Electronics',
+    'BAKERY': 'Baked Goods',
+    'CLOTHING': 'Clothing and Footwear',
+    'FAST_FOOD': 'Fast Food',
+    'BEVERAGES': 'Drinks and Beverages',
+    'BEAUTY': 'Jewelry and Accessories',
+  };
+
   // Fallback image URLs per category code
   static const _categoryImages = {
     'ELECTRONICS': 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400',
@@ -31,6 +41,10 @@ class _SearchScreenState extends State<SearchScreen> {
     'HOME': 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400',
     'BEAUTY': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400',
   };
+
+  String _categoryNameForDisplay(CategoryResponse category) {
+    return _sellCategoryLabels[category.code] ?? category.displayName;
+  }
 
   @override
   void initState() {
@@ -44,6 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
       final resp = await apiClient.dio.get('/categories');
       final list = (resp.data as List)
           .map((e) => CategoryResponse.fromJson(e))
+          .where((c) => c.code != 'HOME' && c.code != 'STATIONERY')
           .toList();
       if (mounted) setState(() => _categories = list);
     } on DioException catch (_) {} finally {
@@ -184,13 +199,14 @@ class _SearchScreenState extends State<SearchScreen> {
                 (context, index) {
                   final cat = _categories[index];
                   final imgUrl = cat.coverImageUrl ?? _categoryImages[cat.code];
+                  final displayName = _categoryNameForDisplay(cat);
                   return GestureDetector(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => CategoryListingsScreen(
-                            categoryName: cat.displayName,
+                            categoryName: displayName,
                             categoryCode: cat.code,
                             hasListings: cat.activeListingCount > 0,
                           ),
@@ -199,7 +215,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     },
                     child: CategoryCard(
                       category: CategoryItem(
-                        name: cat.displayName,
+                        name: displayName,
                         itemCount: '${cat.activeListingCount} Items',
                         imageUrl: imgUrl,
                         badge: cat.badge,
