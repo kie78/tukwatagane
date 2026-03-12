@@ -37,6 +37,13 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
   int? _myUserId;
   String? _myUserName;
   int? _resolvedVendorUserId;
+  String _resolvedPrimaryLocation = '';
+
+  String get _displayVendorName {
+    final profileName = _profile?.fullName.trim();
+    if (profileName != null && profileName.isNotEmpty) return profileName;
+    return widget.vendorName;
+  }
 
   bool get _isOwnVendorProfile =>
       _myUserId != null &&
@@ -44,12 +51,14 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           (_profile != null && _myUserId == _profile!.id) ||
           (_myUserName != null &&
               _myUserName!.trim().isNotEmpty &&
+              _displayVendorName.trim().isNotEmpty &&
               _myUserName!.trim().toLowerCase() ==
-                  widget.vendorName.trim().toLowerCase()));
+                  _displayVendorName.trim().toLowerCase()));
 
   @override
   void initState() {
     super.initState();
+    _resolvedPrimaryLocation = widget.primaryLocation.trim();
     _loadMyUserId();
     _initProfile();
   }
@@ -68,12 +77,16 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
 
   Future<void> _initProfile() async {
     int? userId = widget.vendorUserId;
-    // If userId wasn't passed directly, resolve it from the listing
-    if (userId == null && widget.listingId != null) {
+    if (widget.listingId != null) {
       try {
         final resp = await apiClient.dio.get('/listings/${widget.listingId}');
         final listing = ListingResponse.fromJson(resp.data);
-        userId = listing.ownerUserId;
+        userId ??= listing.ownerUserId;
+        final listingLocation =
+            (listing.locationText ?? listing.campus ?? '').trim();
+        if (listingLocation.isNotEmpty && mounted) {
+          setState(() => _resolvedPrimaryLocation = listingLocation);
+        }
       } catch (_) {}
     }
     if (userId != null) {
@@ -99,30 +112,89 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
   }
 
   Future<void> _loadListings() async {
-    if (widget.vendorName.trim().isEmpty && _resolvedVendorUserId == null) return;
+    if (_displayVendorName.trim().isEmpty &&
+        _resolvedVendorUserId == null &&
+        widget.listingId == null) {
+      return;
+    }
     setState(() => _loadingListings = true);
     try {
-      // Use nearby feed (MUST campus centre) and filter client-side by ownerFullName,
-      // since the search endpoint does full-text on listing *content*, not seller name.
-      final resp = await apiClient.dio.get('/listings/nearby', queryParameters: {
-        'lat': -0.6089,
-        'lng': 30.6570,
-        'radiusKm': 10.0,
-        'size': 50,
-      });
-      final page = ListingPage.fromJson(resp.data);
-      List<ListingCardResponse> vendorListings;
-      if (_resolvedVendorUserId != null) {
-        vendorListings = page.items
-            .where((item) => item.ownerUserId == _resolvedVendorUserId)
-            .take(6)
-            .toList();
-      } else {
-        final name = widget.vendorName.trim().toLowerCase();
-        vendorListings = page.items
-            .where((item) => item.ownerFullName?.trim().toLowerCase() == name)
-            .take(6)
-            .toList();
+      int? targetOwnerUserId = _resolvedVendorUserId;
+      ListingCardResponse? currentListingCard;
+
+      if (widget.listingId != null) {
+        try {
+          final currentResp = await apiClient.dio.get('/listings/${widget.listingId}');
+          final currentListing = ListingResponse.fromJson(currentResp.data);
+          targetOwnerUserId ??= currentListing.ownerUserId;
+          if (currentListing.status == ListingStatus.ACTIVE) {
+            currentListingCard = ListingCardResponse(
+              id: currentListing.id,
+              title: currentListing.title,
+              priceUgx: currentListing.priceUgx,
+              currency: currentListing.currency,
+              categoryCode: currentListing.categoryCode,
+              description: currentListing.description,
+              locationText: currentListing.locationText,
+              campus: currentListing.campus,
+              primaryImageUrl: currentListing.primaryImageUrl,
+              createdAt: currentListing.createdAt,
+              ownerFullName: _displayVendorName,
+              ownerUserId: currentListing.ownerUserId,
+            );
+          }
+        } catch (_) {}
+      }
+
+      double lat = -0.6089;
+      double lng = 30.6570;
+      try {
+        final profileResp = await apiClient.dio.get('/users/profile');
+        final profile = UserProfile.fromJson(profileResp.data);
+        final loc = profile.registeredLocation ?? profile.alternateLocation;
+        final resolvedLat = loc?.lat;
+        final resolvedLng = loc?.lng;
+        if (resolvedLat != null && resolvedLng != null) {
+          lat = resolvedLat;
+          lng = resolvedLng;
+        }
+      } catch (_) {}
+
+      List<ListingCardResponse> vendorListings = [];
+      final seenIds = <int>{};
+      final expectedCount = _profile?.activeListingsCount;
+      final targetName = _displayVendorName.trim().toLowerCase();
+      const pageSize = 100;
+      var pageIndex = 0;
+      var total = pageSize;
+
+      while (pageIndex * pageSize < total) {
+        final resp = await apiClient.dio.get('/listings/feed', queryParameters: {
+          'lat': lat,
+          'lng': lng,
+          'page': pageIndex,
+          'size': pageSize,
+        });
+        final page = ListingPage.fromJson(resp.data);
+        total = page.total;
+
+        final matches = targetOwnerUserId != null
+            ? page.items.where((item) => item.ownerUserId == targetOwnerUserId)
+            : page.items.where(
+                (item) => item.ownerFullName?.trim().toLowerCase() == targetName,
+              );
+
+        for (final item in matches) {
+          if (seenIds.add(item.id)) vendorListings.add(item);
+        }
+
+        if (page.items.isEmpty) break;
+        if (expectedCount != null && vendorListings.length >= expectedCount) break;
+        pageIndex++;
+      }
+
+      if (currentListingCard != null && seenIds.add(currentListingCard.id)) {
+        vendorListings.insert(0, currentListingCard);
       }
 
       // If this is my own profile and nearby filter returned nothing, use my listings endpoint.
@@ -146,7 +218,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                     campus: item.campus,
                     primaryImageUrl: item.primaryImageUrl,
                     createdAt: item.createdAt,
-                    ownerFullName: widget.vendorName,
+                    ownerFullName: _displayVendorName,
                     ownerUserId: item.ownerUserId,
                   ))
               .toList();
@@ -154,7 +226,14 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         } catch (_) {}
       }
 
-      if (mounted) setState(() => _listings = vendorListings);
+      if (mounted) {
+        setState(() {
+          if (targetOwnerUserId != null) {
+            _resolvedVendorUserId = targetOwnerUserId;
+          }
+          _listings = vendorListings.take(6).toList();
+        });
+      }
     } catch (_) {}
     if (mounted) setState(() => _loadingListings = false);
   }
@@ -171,7 +250,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         null, null,
         fallback: (_profile?.campus?.isNotEmpty == true)
             ? _profile!.campus!
-            : widget.primaryLocation,
+            : _resolvedPrimaryLocation,
       );
     final memberSince = _profile != null
         ? _formatMemberSince(_profile!.memberSince)
@@ -255,7 +334,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          widget.vendorName,
+                          _displayVendorName,
                           style: TextStyle(
                             color: AppColors.darkGray,
                             fontSize: 24,
@@ -338,18 +417,8 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               bottom: 0,
               left: 0,
               right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
+              child: SafeArea(
+                minimum: const EdgeInsets.all(20),
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     final id = widget.listingId;
@@ -363,8 +432,9 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         MaterialPageRoute(
                           builder: (context) => InboxScreen(
                             conversationId: conv.id,
-                            userName: widget.vendorName,
+                            userName: _displayVendorName,
                             isOnline: widget.isOnline,
+                            phoneNumber: _profile?.phoneNumber,
                           ),
                         ),
                       );
@@ -487,7 +557,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 productDescription: listing.description ?? '',
                 price: listing.priceUgx,
                 imageUrl: listing.primaryImageUrl,
-                vendorName: widget.vendorName,
+                vendorName: _displayVendorName,
                 vendorLocation: listing.locationText ?? listing.campus ?? widget.primaryLocation,
                 vendorAvatar: widget.vendorAvatar,
                 ownerUserIdHint: listing.ownerUserId,

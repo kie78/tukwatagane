@@ -49,6 +49,13 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   List<MessageResponse> _messages = [];
   int? _myUserId;
   StompUnsubscribe? _stompUnsub;
+  int _tempMsgId = -1;      // local counter for optimistic message IDs
+  int _pendingEchos = 0;    // optimistic messages awaiting STOMP confirmation
+
+  // Product reference card state (populated from widget params or fetched)
+  String? _productTitle;
+  String? _productImageUrl;
+  int? _productPrice;
 
   @override
   void initState() {
@@ -58,8 +65,31 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
 
   Future<void> _init() async {
     _myUserId = await authService.getUserId();
+    // Use widget params if available; otherwise fetch from API
+    if (widget.productTitle != null) {
+      setState(() {
+        _productTitle = widget.productTitle;
+        _productImageUrl = widget.productImage;
+        _productPrice = widget.productPrice;
+      });
+    } else if (widget.productListingId != null) {
+      _fetchListingDetails(widget.productListingId!);
+    }
     await _loadMessages();
     _connectStomp();
+  }
+
+  Future<void> _fetchListingDetails(int listingId) async {
+    try {
+      final resp = await apiClient.dio.get('/listings/$listingId');
+      if (mounted) {
+        setState(() {
+          _productTitle = resp.data['title'] as String?;
+          _productImageUrl = resp.data['primaryImageUrl'] as String?;
+          _productPrice = resp.data['priceUgx'] as int?;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadMessages() async {
@@ -85,13 +115,26 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     _stompUnsub = stompService.subscribeToConversation(
       conversationId: widget.conversationId,
       onMessage: (msg) {
-        if (mounted) {
+        if (!mounted) return;
+        if (msg.senderUserId == _myUserId && _pendingEchos > 0) {
+          // Replace the matching optimistic message with the confirmed one
+          setState(() {
+            final idx = _messages
+                .indexWhere((m) => m.id < 0 && m.body == msg.body);
+            if (idx >= 0) {
+              _messages[idx] = msg;
+            } else {
+              _messages.add(msg);
+            }
+          });
+          _pendingEchos--;
+        } else if (msg.senderUserId != _myUserId) {
           setState(() => _messages.add(msg));
           _scrollToBottom();
-          if (msg.senderUserId != _myUserId && unreadNotifier.value > 0) {
-            unreadNotifier.value++;
-          }
+          unreadNotifier.value++;
+          conversationUpdateNotifier.value++;
         }
+        // own-echo with no pending: silently drop (already shown)
       },
     );
   }
@@ -106,6 +149,51 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         );
       }
     });
+  }
+
+  String? get _normalizedPhoneNumber {
+    final phoneNumber = widget.phoneNumber?.trim();
+    if (phoneNumber == null || phoneNumber.isEmpty) return null;
+    return phoneNumber.replaceAll(RegExp(r'\s+'), '');
+  }
+
+  Future<void> _openDialer() async {
+    final phoneNumber = _normalizedPhoneNumber;
+    if (phoneNumber == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This seller has no phone number available.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final phoneUri = Uri.parse('tel:$phoneNumber');
+
+    try {
+      final didLaunch = await launchUrl(
+        phoneUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!didLaunch && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the phone app.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the phone app.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -132,14 +220,31 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
     _messageController.clear();
+
+    // Optimistically add to UI immediately
+    final tempId = _tempMsgId--;
+    final optimistic = MessageResponse(
+      id: tempId,
+      conversationId: widget.conversationId,
+      senderUserId: _myUserId ?? 0,
+      body: text,
+      createdAt: DateTime.now(),
+    );
+    setState(() => _messages.add(optimistic));
+    _pendingEchos++;
+    _scrollToBottom();
+    conversationUpdateNotifier.value++;
+
     try {
       await apiClient.dio.post(
         '/conversations/${widget.conversationId}/messages',
         data: {'body': text},
       );
-      // STOMP subscription will deliver the message back
+      // STOMP will echo the confirmed message back; handled in _connectStomp
     } catch (e) {
+      _pendingEchos--;
       if (mounted) {
+        setState(() => _messages.removeWhere((m) => m.id == tempId));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Send failed: $e'), backgroundColor: Colors.red),
         );
@@ -173,6 +278,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                       vendorName: widget.userName,
                       vendorAvatar: widget.avatarUrl,
                       isOnline: widget.isOnline,
+                      listingId: widget.productListingId,
                       vendorUserId: widget.counterpartUserId,
                     ),
                   ),
@@ -208,23 +314,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                         ),
                       ),
                     ),
-                  if (widget.isOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.lightGray,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
+
                 ],
               ),
             ),
@@ -249,16 +339,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         ),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.phone,
-              color: Colors.black,
-            ),
-            onPressed: () async {
-              final Uri phoneUri = Uri(scheme: 'tel', path: widget.phoneNumber);
-              if (await canLaunchUrl(phoneUri)) {
-                await launchUrl(phoneUri);
-              }
-            },
+            icon: const Icon(Icons.phone, color: Colors.black),
+            onPressed: _openDialer,
           ),
         ],
       ),
@@ -269,9 +351,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             child: Column(
               children: [
                 // Product Reference Card (if available)
-                if (widget.productTitle != null &&
-                    widget.productImage != null &&
-                    widget.productPrice != null)
+                if (_productTitle != null)
                   _buildProductReferenceCard(),
                 // Messages or Empty State
                 Expanded(
@@ -520,9 +600,9 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 MaterialPageRoute(
                   builder: (context) => ProductDetailsScreen(
                     listingId: widget.productListingId,
-                    productTitle: widget.productTitle!,
-                    price: widget.productPrice!,
-                    imageUrl: widget.productImage,
+                    productTitle: _productTitle!,
+                    price: _productPrice ?? 0,
+                    imageUrl: _productImageUrl,
                     vendorName: widget.userName,
                     vendorLocation: '',
                   ),
@@ -530,65 +610,80 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               )
           : null,
       child: Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.lightGray,
-          width: 1,
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.lightGray, width: 1),
         ),
-      ),
-      child: Row(
-        children: [
-          // Product Image
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(12),
-              bottomLeft: Radius.circular(12),
+        child: Row(
+          children: [
+            // Product Image
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
+              ),
+              child: _productImageUrl != null
+                  ? Image.network(
+                      _productImageUrl!,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                    )
+                  : _imagePlaceholder(),
             ),
-            child: Image.network(
-              widget.productImage!,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-            ),
-          ),
-          // Product Details
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.productTitle!,
-                    style: const TextStyle(
-                      color: AppColors.darkGray,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+            // Product Details
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _productTitle!,
+                      style: const TextStyle(
+                        color: AppColors.darkGray,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'UGX ${widget.productPrice!.toString().replaceAllMapped(
-                          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                          (Match m) => '${m[1]},',
-                        )}',
-                    style: const TextStyle(
-                      color: AppColors.teal,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
+                    if (_productPrice != null) ...
+                      [
+                        const SizedBox(height: 4),
+                        Text(
+                          'UGX ${_productPrice!.toString().replaceAllMapped(
+                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                (Match m) => '${m[1]},',
+                              )}',
+                          style: const TextStyle(
+                            color: AppColors.teal,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),    ),    );
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      width: 80,
+      height: 80,
+      color: AppColors.lightGray,
+      child: const Icon(Icons.image_not_supported_outlined,
+          color: AppColors.mediumGray, size: 32),
+    );
   }
 }
 

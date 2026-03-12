@@ -12,6 +12,8 @@ final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
 final ValueNotifier<int> unreadNotifier = ValueNotifier(0);
+final ValueNotifier<int> conversationUpdateNotifier = ValueNotifier(0);
+final ValueNotifier<int> bookmarkUpdateNotifier = ValueNotifier(0);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

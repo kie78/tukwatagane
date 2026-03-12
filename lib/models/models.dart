@@ -371,6 +371,7 @@ class BookmarkCardResponse {
   final DateTime bookmarkedAt;
   final double? distanceMeters;
   final int? ownerUserId;
+  final String? ownerFullName;
 
   const BookmarkCardResponse({
     required this.id,
@@ -387,6 +388,7 @@ class BookmarkCardResponse {
     required this.bookmarkedAt,
     this.distanceMeters,
     this.ownerUserId,
+    this.ownerFullName,
   });
 
   factory BookmarkCardResponse.fromJson(Map<String, dynamic> j) =>
@@ -405,6 +407,7 @@ class BookmarkCardResponse {
         bookmarkedAt: DateTime.parse(j['bookmarkedAt']),
         distanceMeters: j['distanceMeters']?.toDouble(),
         ownerUserId: j['ownerUserId'],
+        ownerFullName: j['ownerFullName'],
       );
 }
 

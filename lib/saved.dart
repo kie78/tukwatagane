@@ -16,6 +16,10 @@ class SavedScreen extends StatefulWidget {
 
 class _SavedScreenState extends State<SavedScreen> with RouteAware {
   List<BookmarkCardResponse> _savedItems = [];
+  Map<int, String> _ownerNames = {};
+  Map<int, int> _listingOwnerIds = {};
+  Map<int, ListingResponse> _listingDetails = {};
+  Map<int, ListingCardResponse> _listingCards = {};
   bool _isLoading = true;
   int? _myUserId;
 
@@ -52,9 +56,138 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       final items = (resp.data['items'] as List)
           .map((e) => BookmarkCardResponse.fromJson(e))
           .toList();
-      if (mounted) setState(() => _savedItems = items);
+      if (mounted) {
+        setState(() {
+          _savedItems = items;
+          _ownerNames = {};
+          _listingOwnerIds = {};
+          _listingDetails = {};
+          _listingCards = {};
+        });
+      }
+      await _hydrateSavedListings(items);
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _hydrateSavedListings(List<BookmarkCardResponse> items) async {
+    final listingCardResults = await Future.wait(
+      items.map((item) async {
+        try {
+          final resp = await apiClient.dio.get(
+            '/listings/search',
+            queryParameters: {'query': item.title, 'page': 0, 'size': 20},
+          );
+          final page = ListingPage.fromJson(resp.data);
+          ListingCardResponse? match;
+          for (final listing in page.items) {
+            if (listing.id == item.id) {
+              match = listing;
+              break;
+            }
+          }
+          if (match == null) return null;
+          return MapEntry(item.id, match);
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+
+    final listingCards = {
+      for (final entry in listingCardResults)
+        if (entry != null) entry.key: entry.value,
+    };
+
+    final listingResults = await Future.wait(
+      items.map((item) async {
+        if (listingCards.containsKey(item.id)) return null;
+        try {
+          final resp = await apiClient.dio.get('/listings/${item.id}');
+          return MapEntry(item.id, ListingResponse.fromJson(resp.data));
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+
+    final listingDetails = {
+      for (final entry in listingResults)
+        if (entry != null) entry.key: entry.value,
+    };
+
+    final ownerIds = <int>{};
+    final listingOwnerIds = <int, int>{};
+
+    for (final item in items) {
+      final ownerId = listingCards[item.id]?.ownerUserId ??
+          listingDetails[item.id]?.ownerUserId ??
+          item.ownerUserId;
+      if (ownerId != null) {
+        listingOwnerIds[item.id] = ownerId;
+        ownerIds.add(ownerId);
+      }
+    }
+
+    final results = await Future.wait(
+      ownerIds.map((id) async {
+        try {
+          final resp = await apiClient.dio.get('/users/$id/public');
+          final profile = PublicUserProfile.fromJson(resp.data);
+          return MapEntry(id, profile.fullName);
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+
+    if (mounted) {
+      setState(() {
+        _listingCards = listingCards;
+        _listingDetails = listingDetails;
+        _listingOwnerIds = listingOwnerIds;
+        _ownerNames = {
+          for (final e in results)
+            if (e != null) e.key: e.value,
+        };
+      });
+    }
+  }
+
+  ListingCardResponse? _resolvedListingCard(BookmarkCardResponse item) {
+    return _listingCards[item.id];
+  }
+
+  ListingResponse? _resolvedListing(BookmarkCardResponse item) {
+    return _listingDetails[item.id];
+  }
+
+  String _resolvedSellerName(BookmarkCardResponse item) {
+    final ownerId = _resolvedListingCard(item)?.ownerUserId ??
+        _resolvedListing(item)?.ownerUserId ??
+        item.ownerUserId ??
+        _listingOwnerIds[item.id];
+    return _resolvedListingCard(item)?.ownerFullName ??
+        item.ownerFullName ??
+        _ownerNames[ownerId] ??
+        '';
+  }
+
+  String _displaySellerName(BookmarkCardResponse item) {
+    final sellerName = _resolvedSellerName(item).trim();
+    return sellerName.isEmpty ? 'Seller' : sellerName;
+  }
+
+  int? _resolvedOwnerUserId(BookmarkCardResponse item) {
+    return _resolvedListingCard(item)?.ownerUserId ??
+        _resolvedListing(item)?.ownerUserId ??
+        item.ownerUserId ??
+        _listingOwnerIds[item.id];
+  }
+
+  String _resolvedLocation(BookmarkCardResponse item) {
+    final listing = _resolvedListing(item);
+    return listing?.locationText ?? item.locationText ?? listing?.campus ?? item.campus ?? '';
   }
 
   Future<void> _removeItem(int listingId) async {
@@ -70,14 +203,24 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
     try {
       final resp = await apiClient.dio.post('/conversations', data: {'listingId': item.id});
       final conv = ConversationResponse.fromJson(resp.data);
+      String sellerName = _displaySellerName(item);
+      String? sellerPhone;
+      try {
+        final pResp = await apiClient.dio.get('/users/${conv.posterUserId}/public');
+        final profile = PublicUserProfile.fromJson(pResp.data);
+        sellerName = profile.fullName;
+        sellerPhone = profile.phoneNumber;
+      } catch (_) {}
       if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => InboxScreen(
             conversationId: conv.id,
-            userName: 'Seller',
+            userName: sellerName,
             isOnline: false,
+            phoneNumber: sellerPhone,
+            counterpartUserId: _resolvedOwnerUserId(item) ?? conv.posterUserId,
             productTitle: item.title,
             productImage: item.primaryImageUrl,
             productPrice: item.priceUgx,
@@ -232,8 +375,9 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
               productDescription: item.description ?? '',
               price: item.priceUgx,
               imageUrl: item.primaryImageUrl,
-              vendorName: '',
-              vendorLocation: item.campus ?? item.locationText ?? '',
+              vendorName: _displaySellerName(item),
+              vendorLocation: _resolvedLocation(item),
+              initiallyBookmarked: true,
             ),
           ),
         );
@@ -287,10 +431,21 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(
+                        _displaySellerName(item),
+                        style: const TextStyle(
+                          color: AppColors.darkGray,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
                       // Title
                       Text(
                         item.title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.darkGray,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -305,17 +460,17 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                               RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
                               (Match m) => '${m[1]},',
                             )}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.teal,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      // Location with distance
+                      // Location
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.location_on,
                             size: 14,
                             color: AppColors.mediumGray,
@@ -323,8 +478,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              item.campus ?? item.locationText ?? 'MUST Campus',
-                              style: TextStyle(
+                              _resolvedLocation(item),
+                              style: const TextStyle(
                                 color: AppColors.mediumGray,
                                 fontSize: 12,
                               ),
@@ -405,7 +560,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                 ),
                 const SizedBox(width: 8),
                 // Chat Now Button
-                if (_myUserId == null || item.ownerUserId != _myUserId)
+                if (_myUserId == null || _resolvedOwnerUserId(item) != _myUserId)
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: isAvailable ? () => _startChat(item) : null,

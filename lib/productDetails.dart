@@ -17,6 +17,7 @@ class ProductDetailsScreen extends StatefulWidget {
   final String? vendorAvatar;
   final double? vendorRating;
   final bool isVerified;
+  final bool initiallyBookmarked;
   final int? ownerUserIdHint;
   final bool? isOwnListingHint;
 
@@ -32,6 +33,7 @@ class ProductDetailsScreen extends StatefulWidget {
     this.vendorAvatar,
     this.vendorRating,
     this.isVerified = false,
+    this.initiallyBookmarked = false,
     this.ownerUserIdHint,
     this.isOwnListingHint,
   });
@@ -50,28 +52,90 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isChatLoading = false;
   int? _ownerUserId;
   int? _myUserId;
+  String? _myUserName;
+  bool _viewerIdentityLoaded = false;
+  String? _ownerPhoneNumber;
   late String _description;
+
+  bool get _isOwnListingByName {
+    final myUserName = _myUserName?.trim().toLowerCase();
+    final vendorName = widget.vendorName.trim().toLowerCase();
+    return myUserName != null && myUserName.isNotEmpty && vendorName.isNotEmpty && myUserName == vendorName;
+  }
 
   bool get _isOwnListing =>
       widget.isOwnListingHint == true ||
-      (_myUserId != null && _ownerUserId != null && _myUserId == _ownerUserId);
+      (_myUserId != null && _ownerUserId != null && _myUserId == _ownerUserId) ||
+      _isOwnListingByName;
+
+  bool get _showSellerActions => _viewerIdentityLoaded && !_isOwnListing;
 
   final List<String> _images = [];
 
   @override
   void initState() {
     super.initState();
+    _isBookmarked = widget.initiallyBookmarked;
     _ownerUserId = widget.ownerUserIdHint;
     _description = widget.productDescription.trim();
     // Show the primary image immediately while fetching the full listing
     if (widget.imageUrl != null) _images.add(widget.imageUrl!);
     if (widget.listingId != null) _fetchListingImages();
-    authService.getUserId().then((id) {
-      if (mounted) setState(() => _myUserId = id);
-    });
+    _loadBookmarkState();
+    _loadViewerIdentity();
+  }
+
+  Future<void> _loadViewerIdentity() async {
+    final userId = await authService.getUserId();
+    final userName = await authService.getUserName();
+    if (mounted) {
+      setState(() {
+        _myUserId = userId;
+        _myUserName = userName;
+        _viewerIdentityLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _loadBookmarkState() async {
+    final listingId = widget.listingId;
+    if (listingId == null) return;
+
+    try {
+      const pageSize = 200;
+      var pageIndex = 0;
+      var total = pageSize;
+      var isBookmarked = false;
+
+      while (pageIndex * pageSize < total && !isBookmarked) {
+        final resp = await apiClient.dio.get(
+          '/bookmarks',
+          queryParameters: {'page': pageIndex, 'size': pageSize},
+        );
+        final items = resp.data['items'] as List? ?? const [];
+        total = (resp.data['total'] as int?) ?? items.length;
+
+        isBookmarked = items.any((raw) {
+          if (raw is! Map) return false;
+          final rawId = raw['id'];
+          final id = rawId is int
+              ? rawId
+              : int.tryParse(rawId?.toString() ?? '');
+          return id == listingId;
+        });
+
+        if (items.isEmpty) break;
+        pageIndex++;
+      }
+
+      if (mounted && !_isBookmarkLoading) {
+        setState(() => _isBookmarked = isBookmarked);
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchListingImages() async {
+    bool shouldTryPublicSearchFallback = _description.isEmpty;
     bool shouldTryMyListingsFallback = _description.isEmpty;
 
     try {
@@ -79,6 +143,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       final listing = ListingResponse.fromJson(resp.data);
       final fetchedDescription = (listing.description ?? '').trim();
 
+      _fetchOwnerPhone(listing.ownerUserId);
       if (mounted) {
         setState(() {
           _ownerUserId = listing.ownerUserId;
@@ -96,14 +161,80 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         });
       }
 
-      shouldTryMyListingsFallback = fetchedDescription.isEmpty && _description.isEmpty;
+      shouldTryPublicSearchFallback =
+          fetchedDescription.isEmpty && _description.isEmpty;
+      shouldTryMyListingsFallback = shouldTryPublicSearchFallback;
     } catch (_) {
       // Endpoint may be owner-only (403); widget.imageUrl placeholder already in _images
+      shouldTryPublicSearchFallback = _description.isEmpty;
       shouldTryMyListingsFallback = _description.isEmpty;
+    }
+
+    if (shouldTryPublicSearchFallback) {
+      final resolvedFromPublicSearch =
+          await _loadDescriptionFromPublicSearch();
+      shouldTryMyListingsFallback =
+          !resolvedFromPublicSearch && _description.isEmpty;
     }
 
     if (shouldTryMyListingsFallback) {
       await _loadDescriptionFromMyListings();
+    }
+  }
+
+  Future<void> _fetchOwnerPhone(int ownerUserId) async {
+    try {
+      final resp = await apiClient.dio.get('/users/$ownerUserId/public');
+      final profile = PublicUserProfile.fromJson(resp.data);
+      if (mounted) setState(() => _ownerPhoneNumber = profile.phoneNumber);
+    } catch (_) {}
+  }
+
+  Future<bool> _loadDescriptionFromPublicSearch() async {
+    final listingId = widget.listingId;
+    final query = widget.productTitle.trim();
+
+    if (listingId == null || query.isEmpty) return false;
+
+    try {
+      final resp = await apiClient.dio.get(
+        '/listings/search',
+        queryParameters: {
+          'query': query,
+          'page': 0,
+          'size': 20,
+        },
+      );
+      final page = ListingPage.fromJson(resp.data);
+
+      ListingCardResponse? match;
+      for (final item in page.items) {
+        if (item.id == listingId) {
+          match = item;
+          break;
+        }
+      }
+
+      if (match == null) return false;
+
+      final publicDescription = (match.description ?? '').trim();
+      if (!mounted) return publicDescription.isNotEmpty;
+
+      setState(() {
+        if (publicDescription.isNotEmpty) {
+          _description = publicDescription;
+        }
+        if (_ownerUserId == null && match?.ownerUserId != null) {
+          _ownerUserId = match?.ownerUserId;
+        }
+        if (_images.isEmpty && match?.primaryImageUrl != null) {
+          _images.add(match!.primaryImageUrl!);
+        }
+      });
+
+      return publicDescription.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -149,6 +280,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         await apiClient.dio.post('/bookmarks', data: {'listingId': widget.listingId});
         if (mounted) setState(() => _isBookmarked = true);
       }
+      bookmarkUpdateNotifier.value++;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_isBookmarked ? 'Added to saved items' : 'Removed from saved items'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (_) {}
     if (mounted) setState(() => _isBookmarkLoading = false);
   }
@@ -167,6 +308,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               conversationId: conv.id,
               userName: widget.vendorName,
               avatarUrl: widget.vendorAvatar,
+              phoneNumber: _ownerPhoneNumber,
               productTitle: widget.productTitle,
               productImage: widget.imageUrl,
               productPrice: widget.price,
@@ -391,7 +533,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              if (!_isOwnListing)
+                              if (_showSellerActions)
                               GestureDetector(
                                 onTap: _isBookmarkLoading ? null : _toggleBookmark,
                                 child: Container(
@@ -573,7 +715,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
           ),
           // Bottom Action Button
-          if (!_isOwnListing)
+          if (_showSellerActions)
           Positioned(
             bottom: 0,
             left: 0,

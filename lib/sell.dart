@@ -36,6 +36,7 @@ class SellScreen extends StatefulWidget {
 
 class _SellScreenState extends State<SellScreen> {
   bool _isLoading = false;
+  bool _isLocationLoading = true;
   bool _useRegisteredLocation = false;
   String _registeredLocationLabel = 'Loading...';
   double? _registeredLocationLat;
@@ -118,9 +119,13 @@ class _SellScreenState extends State<SellScreen> {
         _registeredLocationLabel = label;
         _registeredLocationLat = loc?.lat;
         _registeredLocationLng = loc?.lng;
+        _isLocationLoading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _registeredLocationLabel = 'Your registered location');
+      if (mounted) setState(() {
+        _registeredLocationLabel = 'Your registered location';
+        _isLocationLoading = false;
+      });
     }
   }
 
@@ -217,6 +222,12 @@ class _SellScreenState extends State<SellScreen> {
     if (!_useRegisteredLocation && _selectedZone == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a location zone'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_useRegisteredLocation && _isLocationLoading) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your location is still loading, please wait a moment'), backgroundColor: Colors.orange),
       );
       return;
     }

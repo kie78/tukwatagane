@@ -25,11 +25,46 @@ class _BrowseScreenState extends State<BrowseScreen> {
   List<ListingCardResponse> _listings = [];
   String? _myFullName;
   bool _isLoading = true;
+  Set<int> _bookmarkedIds = {};
 
   @override
   void initState() {
     super.initState();
+    bookmarkUpdateNotifier.addListener(_onBookmarkUpdate);
     _loadFeed();
+    _bootstrapUnread();
+  }
+
+  @override
+  void dispose() {
+    bookmarkUpdateNotifier.removeListener(_onBookmarkUpdate);
+    super.dispose();
+  }
+
+  void _onBookmarkUpdate() {
+    _loadBookmarkedIds();
+  }
+
+  Future<void> _loadBookmarkedIds() async {
+    try {
+      final resp = await apiClient.dio
+          .get('/bookmarks', queryParameters: {'page': 0, 'size': 200});
+      final ids = (resp.data['items'] as List)
+          .map((e) => e['id'] as int)
+          .toSet();
+      if (mounted) setState(() => _bookmarkedIds = ids);
+    } catch (_) {}
+  }
+
+  Future<void> _bootstrapUnread() async {
+    try {
+      final resp = await apiClient.dio.get('/conversations',
+          queryParameters: {'page': 0, 'size': 50});
+      final items = (resp.data['items'] as List)
+          .map((e) => ConversationListItem.fromJson(e))
+          .toList();
+      unreadNotifier.value = items.fold(0, (sum, c) => sum + c.unreadCount);
+    } catch (_) {}
   }
 
   Future<void> _loadFeed() async {
@@ -70,6 +105,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+    _loadBookmarkedIds();
   }
 
   String _timeAgo(DateTime dt) {
@@ -178,6 +214,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                         ownerUserId: item.ownerUserId,
                         description: item.description,
                         myFullName: _myFullName,
+                        initiallyBookmarked: _bookmarkedIds.contains(item.id),
                       );
                     },
                   ),
@@ -201,6 +238,7 @@ class ProductCard extends StatefulWidget {
   final int? ownerUserId;
   final String? description;
   final String? myFullName;
+  final bool initiallyBookmarked;
 
   const ProductCard({
     super.key,
@@ -217,6 +255,7 @@ class ProductCard extends StatefulWidget {
     this.ownerUserId,
     this.description,
     this.myFullName,
+    this.initiallyBookmarked = false,
   });
 
   @override
@@ -225,14 +264,25 @@ class ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<ProductCard> {
   bool _isBookmarked = false;
+  bool _isBookmarkLoading = false;
   int? _myUserId;
 
   @override
   void initState() {
     super.initState();
+    _isBookmarked = widget.initiallyBookmarked;
     authService.getUserId().then((id) {
       if (mounted) setState(() => _myUserId = id);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isBookmarkLoading &&
+        oldWidget.initiallyBookmarked != widget.initiallyBookmarked) {
+      _isBookmarked = widget.initiallyBookmarked;
+    }
   }
 
   bool get _isOwnListing =>
@@ -243,8 +293,34 @@ class _ProductCardState extends State<ProductCard> {
         widget.sellerName.trim().toLowerCase() ==
           widget.myFullName!.trim().toLowerCase());
 
-  void _toggleBookmark() {
-    setState(() => _isBookmarked = !_isBookmarked);
+  void _toggleBookmark() async {
+    if (_isBookmarkLoading) return;
+    setState(() {
+      _isBookmarkLoading = true;
+      _isBookmarked = !_isBookmarked;
+    });
+    try {
+      if (_isBookmarked) {
+        await apiClient.dio.post('/bookmarks', data: {'listingId': widget.listingId});
+      } else {
+        await apiClient.dio.delete('/bookmarks', queryParameters: {'listingId': widget.listingId});
+      }
+      bookmarkUpdateNotifier.value++;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_isBookmarked ? 'Added to saved items' : 'Removed from saved items'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (_) {
+      // Revert on failure
+      if (mounted) setState(() => _isBookmarked = !_isBookmarked);
+    } finally {
+      if (mounted) setState(() => _isBookmarkLoading = false);
+    }
   }
 
   void _shareProduct() async {
@@ -291,6 +367,7 @@ Check out this item on Tukwatagane!
               vendorName: widget.sellerName,
               vendorLocation: widget.location,
               vendorAvatar: widget.sellerAvatar,
+              initiallyBookmarked: _isBookmarked,
               ownerUserIdHint: widget.ownerUserId,
               isOwnListingHint: _isOwnListing,
             ),
@@ -326,6 +403,8 @@ Check out this item on Tukwatagane!
                         builder: (context) => VendorProfileScreen(
                           vendorName: widget.sellerName,
                           vendorAvatar: widget.sellerAvatar,
+                          primaryLocation: widget.location,
+                          vendorUserId: widget.ownerUserId,
                           listingId: widget.listingId,
                         ),
                       ),
@@ -500,6 +579,11 @@ Check out this item on Tukwatagane!
                               data: {'listingId': widget.listingId},
                             );
                             final conv = ConversationResponse.fromJson(resp.data);
+                            String? sellerPhone;
+                            try {
+                              final pResp = await apiClient.dio.get('/users/${conv.posterUserId}/public');
+                              sellerPhone = PublicUserProfile.fromJson(pResp.data).phoneNumber;
+                            } catch (_) {}
                             if (!context.mounted) return;
                             Navigator.push(
                               context,
@@ -508,6 +592,7 @@ Check out this item on Tukwatagane!
                                   conversationId: conv.id,
                                   userName: widget.sellerName,
                                   isOnline: false,
+                                  phoneNumber: sellerPhone,
                                   productTitle: widget.productTitle,
                                   productImage: widget.imageUrl,
                                   productPrice: int.parse(widget.price.replaceAll(',', '')),
