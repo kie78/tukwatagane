@@ -34,6 +34,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
   List<ListingCardResponse> _listings = [];
   bool _loadingProfile = false;
   bool _loadingListings = false;
+  int _listingsRequestEpoch = 0;
   int? _myUserId;
   String? _myUserName;
   int? _resolvedVendorUserId;
@@ -45,6 +46,16 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     return widget.vendorName;
   }
 
+  String? get _resolvedVendorAvatarUrl {
+    final profileAvatar = _profile?.avatarUrl?.trim();
+    if (profileAvatar != null && profileAvatar.isNotEmpty) return profileAvatar;
+    final fallbackAvatar = widget.vendorAvatar?.trim();
+    if (fallbackAvatar != null && fallbackAvatar.isNotEmpty) {
+      return fallbackAvatar;
+    }
+    return null;
+  }
+
   bool get _isOwnVendorProfile =>
       _myUserId != null &&
       ((_resolvedVendorUserId != null && _myUserId == _resolvedVendorUserId) ||
@@ -54,6 +65,101 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               _displayVendorName.trim().isNotEmpty &&
               _myUserName!.trim().toLowerCase() ==
                   _displayVendorName.trim().toLowerCase()));
+
+  bool _isGenericLocationLabel(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized == 'main' ||
+        normalized == 'must main' ||
+        normalized == 'main campus' ||
+        normalized == 'campus main' ||
+        normalized.contains('dummy text location');
+  }
+
+  String _pickBestLocationLabel(Iterable<String?> candidates) {
+    String? fallback;
+    for (final raw in candidates) {
+      final value = raw?.trim() ?? '';
+      if (value.isEmpty) continue;
+      fallback ??= value;
+      if (!_isGenericLocationLabel(value)) return value;
+    }
+    return fallback ?? '';
+  }
+
+  String _locationFromListings(List<ListingCardResponse> listings) {
+    final candidates = <String?>[];
+    for (final listing in listings) {
+      candidates.add(listing.locationText);
+      candidates.add(listing.campus);
+    }
+    return _pickBestLocationLabel(candidates);
+  }
+
+  bool _isListingOwnedByTargetSeller(
+    ListingCardResponse item, {
+    required int? targetOwnerUserId,
+    required String sellerNameLower,
+  }) {
+    final ownerId = item.ownerUserId;
+    final ownerName = item.ownerFullName?.trim().toLowerCase();
+
+    if (targetOwnerUserId != null) {
+      if (ownerId != null) {
+        return ownerId == targetOwnerUserId;
+      }
+      return sellerNameLower.isNotEmpty &&
+          ownerName != null &&
+          ownerName == sellerNameLower;
+    }
+
+    return sellerNameLower.isNotEmpty &&
+        ownerName != null &&
+        ownerName == sellerNameLower;
+  }
+
+  Future<List<ListingCardResponse>> _searchActiveListingsForSeller({
+    required String sellerQuery,
+    required String sellerNameLower,
+    required int? targetOwnerUserId,
+  }) async {
+    if (sellerQuery.trim().isEmpty) return const [];
+
+    const pageSize = 100;
+    var pageIndex = 0;
+    var total = pageSize;
+    final results = <ListingCardResponse>[];
+    final seenIds = <int>{};
+
+    while (pageIndex * pageSize < total) {
+      final resp = await apiClient.dio.get(
+        '/listings/search',
+        queryParameters: {
+          'query': sellerQuery,
+          'page': pageIndex,
+          'size': pageSize,
+        },
+      );
+      final page = ListingPage.fromJson(resp.data);
+      total = page.total;
+
+      for (final item in page.items) {
+        final isTargetSeller = _isListingOwnedByTargetSeller(
+          item,
+          targetOwnerUserId: targetOwnerUserId,
+          sellerNameLower: sellerNameLower,
+        );
+        if (!isTargetSeller) continue;
+        if (seenIds.add(item.id)) {
+          results.add(item);
+        }
+      }
+
+      if (page.items.isEmpty) break;
+      pageIndex++;
+    }
+
+    return results;
+  }
 
   @override
   void initState() {
@@ -82,8 +188,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         final resp = await apiClient.dio.get('/listings/${widget.listingId}');
         final listing = ListingResponse.fromJson(resp.data);
         userId ??= listing.ownerUserId;
-        final listingLocation =
-            (listing.locationText ?? listing.campus ?? '').trim();
+        final listingLocation = _pickBestLocationLabel([
+          listing.locationText,
+          listing.campus,
+          _resolvedPrimaryLocation,
+        ]);
         if (listingLocation.isNotEmpty && mounted) {
           setState(() => _resolvedPrimaryLocation = listingLocation);
         }
@@ -117,16 +226,30 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         widget.listingId == null) {
       return;
     }
+
+    final requestEpoch = ++_listingsRequestEpoch;
     setState(() => _loadingListings = true);
+
     try {
       int? targetOwnerUserId = _resolvedVendorUserId;
       ListingCardResponse? currentListingCard;
+      var resolvedPrimaryLocation = _resolvedPrimaryLocation;
 
       if (widget.listingId != null) {
         try {
-          final currentResp = await apiClient.dio.get('/listings/${widget.listingId}');
+          final currentResp = await apiClient.dio.get(
+            '/listings/${widget.listingId}',
+          );
           final currentListing = ListingResponse.fromJson(currentResp.data);
           targetOwnerUserId ??= currentListing.ownerUserId;
+          final currentListingLocation = _pickBestLocationLabel([
+            currentListing.locationText,
+            currentListing.campus,
+            resolvedPrimaryLocation,
+          ]);
+          if (currentListingLocation.isNotEmpty) {
+            resolvedPrimaryLocation = currentListingLocation;
+          }
           if (currentListing.status == ListingStatus.ACTIVE) {
             currentListingCard = ListingCardResponse(
               id: currentListing.id,
@@ -158,43 +281,96 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           lat = resolvedLat;
           lng = resolvedLng;
         }
+
+        final ownRegisteredLocation = _pickBestLocationLabel([
+          profile.registeredLocation?.label,
+          profile.alternateLocation?.label,
+        ]);
+        final isOwnProfileView =
+            (targetOwnerUserId != null && targetOwnerUserId == profile.id) ||
+            (widget.vendorUserId != null &&
+                widget.vendorUserId == profile.id) ||
+            (_displayVendorName.trim().isNotEmpty &&
+                profile.fullName.trim().isNotEmpty &&
+                _displayVendorName.trim().toLowerCase() ==
+                    profile.fullName.trim().toLowerCase());
+        if (isOwnProfileView && ownRegisteredLocation.isNotEmpty) {
+          resolvedPrimaryLocation = ownRegisteredLocation;
+        }
       } catch (_) {}
 
       List<ListingCardResponse> vendorListings = [];
       final seenIds = <int>{};
-      final expectedCount = _profile?.activeListingsCount;
       final targetName = _displayVendorName.trim().toLowerCase();
+      final targetQueryName = _displayVendorName.trim();
       const pageSize = 100;
       var pageIndex = 0;
       var total = pageSize;
 
       while (pageIndex * pageSize < total) {
-        final resp = await apiClient.dio.get('/listings/feed', queryParameters: {
-          'lat': lat,
-          'lng': lng,
-          'page': pageIndex,
-          'size': pageSize,
-        });
+        final resp = await apiClient.dio.get(
+          '/listings/feed',
+          queryParameters: {
+            'lat': lat,
+            'lng': lng,
+            'page': pageIndex,
+            'size': pageSize,
+          },
+        );
         final page = ListingPage.fromJson(resp.data);
         total = page.total;
 
-        final matches = targetOwnerUserId != null
-            ? page.items.where((item) => item.ownerUserId == targetOwnerUserId)
-            : page.items.where(
-                (item) => item.ownerFullName?.trim().toLowerCase() == targetName,
-              );
-
-        for (final item in matches) {
-          if (seenIds.add(item.id)) vendorListings.add(item);
+        for (final item in page.items) {
+          final isTargetSeller = _isListingOwnedByTargetSeller(
+            item,
+            targetOwnerUserId: targetOwnerUserId,
+            sellerNameLower: targetName,
+          );
+          if (!isTargetSeller) continue;
+          if (seenIds.add(item.id)) {
+            vendorListings.add(item);
+          }
         }
 
-        if (page.items.isEmpty) break;
-        if (expectedCount != null && vendorListings.length >= expectedCount) break;
+        if (page.items.isEmpty) {
+          break;
+        }
         pageIndex++;
       }
 
       if (currentListingCard != null && seenIds.add(currentListingCard.id)) {
         vendorListings.insert(0, currentListingCard);
+      }
+
+      // Backfill from full-text search when feed payload is missing owner IDs
+      // and the seller has more active listings than we currently resolved.
+      final expectedActiveCount = _profile?.activeListingsCount;
+      final shouldBackfillFromSearch =
+          targetQueryName.isNotEmpty &&
+          (vendorListings.length <= 1 ||
+              (expectedActiveCount != null &&
+                  vendorListings.length < expectedActiveCount));
+
+      if (shouldBackfillFromSearch) {
+        try {
+          final searchResults = await _searchActiveListingsForSeller(
+            sellerQuery: targetQueryName,
+            sellerNameLower: targetName,
+            targetOwnerUserId: targetOwnerUserId,
+          );
+          for (final item in searchResults) {
+            if (seenIds.add(item.id)) {
+              vendorListings.add(item);
+            }
+          }
+        } catch (_) {}
+      }
+
+      final listingLocationLabel = _locationFromListings(vendorListings);
+      if (listingLocationLabel.isNotEmpty &&
+          (resolvedPrimaryLocation.isEmpty ||
+              _isGenericLocationLabel(resolvedPrimaryLocation))) {
+        resolvedPrimaryLocation = listingLocationLabel;
       }
 
       // If this is my own profile and nearby filter returned nothing, use my listings endpoint.
@@ -206,52 +382,78 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           );
           final myListings = (myResp.data['items'] as List? ?? const [])
               .map((e) => ListingResponse.fromJson(e))
-              .take(6)
-              .map((item) => ListingCardResponse(
-                    id: item.id,
-                    title: item.title,
-                    priceUgx: item.priceUgx,
-                    currency: item.currency,
-                    categoryCode: item.categoryCode,
-                    description: item.description,
-                    locationText: item.locationText,
-                    campus: item.campus,
-                    primaryImageUrl: item.primaryImageUrl,
-                    createdAt: item.createdAt,
-                    ownerFullName: _displayVendorName,
-                    ownerUserId: item.ownerUserId,
-                  ))
+              .map(
+                (item) => ListingCardResponse(
+                  id: item.id,
+                  title: item.title,
+                  priceUgx: item.priceUgx,
+                  currency: item.currency,
+                  categoryCode: item.categoryCode,
+                  description: item.description,
+                  locationText: item.locationText,
+                  campus: item.campus,
+                  primaryImageUrl: item.primaryImageUrl,
+                  createdAt: item.createdAt,
+                  ownerFullName: _displayVendorName,
+                  ownerUserId: item.ownerUserId,
+                ),
+              )
               .toList();
           vendorListings = myListings;
         } catch (_) {}
       }
 
-      if (mounted) {
+      if (!mounted || requestEpoch != _listingsRequestEpoch) {
+        return;
+      }
+
+      setState(() {
+        if (targetOwnerUserId != null) {
+          _resolvedVendorUserId = targetOwnerUserId;
+        }
+        if (resolvedPrimaryLocation.isNotEmpty) {
+          _resolvedPrimaryLocation = resolvedPrimaryLocation;
+        }
+        _listings = vendorListings;
+        _loadingListings = false;
+      });
+    } catch (_) {
+      if (mounted && requestEpoch == _listingsRequestEpoch) {
         setState(() {
-          if (targetOwnerUserId != null) {
-            _resolvedVendorUserId = targetOwnerUserId;
-          }
-          _listings = vendorListings.take(6).toList();
+          _loadingListings = false;
         });
       }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingListings = false);
+    }
   }
 
   String _formatMemberSince(DateTime dt) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[dt.month - 1]} ${dt.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final campus = zoneLabel(
-        null, null,
-        fallback: (_profile?.campus?.isNotEmpty == true)
-            ? _profile!.campus!
-            : _resolvedPrimaryLocation,
-      );
+    final vendorAvatarUrl = _resolvedVendorAvatarUrl;
+
+    final primaryLocation = _pickBestLocationLabel([
+      _resolvedPrimaryLocation,
+      _profile?.campus,
+      widget.primaryLocation,
+    ]);
+    final campus = zoneLabel(null, null, fallback: primaryLocation);
     final memberSince = _profile != null
         ? _formatMemberSince(_profile!.memberSince)
         : null;
@@ -263,10 +465,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         leading: IconButton(
           icon: CircleAvatar(
             backgroundColor: AppColors.lightGray,
-            child: Icon(
-              Icons.arrow_back,
-              color: AppColors.darkGray,
-            ),
+            child: Icon(Icons.arrow_back, color: AppColors.darkGray),
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -297,10 +496,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                             CircleAvatar(
                               radius: 60,
                               backgroundColor: AppColors.darkGray,
-                              backgroundImage: widget.vendorAvatar != null
-                                  ? NetworkImage(widget.vendorAvatar!) as ImageProvider
+                              backgroundImage: vendorAvatarUrl != null
+                                  ? NetworkImage(vendorAvatarUrl)
+                                        as ImageProvider
                                   : null,
-                              child: widget.vendorAvatar == null
+                              child: vendorAvatarUrl == null
                                   ? Text(
                                       widget.vendorName.isNotEmpty
                                           ? widget.vendorName[0].toUpperCase()
@@ -370,7 +570,8 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                       const SizedBox(height: 12),
                       _buildCredentialCard(
                         icon: Icons.storefront_outlined,
-                        title: '$activeCount active listing${activeCount == 1 ? '' : 's'}',
+                        title:
+                            '$activeCount active listing${activeCount == 1 ? '' : 's'}',
                         subtitle: 'Verified Campus Seller',
                         isVerified: true,
                       ),
@@ -424,7 +625,10 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                     final id = widget.listingId;
                     if (id == null) return;
                     try {
-                      final resp = await apiClient.dio.post('/conversations', data: {'listingId': id});
+                      final resp = await apiClient.dio.post(
+                        '/conversations',
+                        data: {'listingId': id},
+                      );
                       final conv = ConversationResponse.fromJson(resp.data);
                       if (!context.mounted) return;
                       Navigator.push(
@@ -433,8 +637,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                           builder: (context) => InboxScreen(
                             conversationId: conv.id,
                             userName: _displayVendorName,
+                            avatarUrl: _resolvedVendorAvatarUrl,
                             isOnline: widget.isOnline,
                             phoneNumber: _profile?.phoneNumber,
+                            counterpartUserId: _resolvedVendorUserId,
+                            productListingId: id,
                           ),
                         ),
                       );
@@ -456,10 +663,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                   ),
                   label: Text(
                     'Message Vendor',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -482,7 +686,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -496,11 +700,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               color: AppColors.lightGray,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: AppColors.mediumGray,
-              size: 24,
-            ),
+            child: Icon(icon, color: AppColors.mediumGray, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -518,10 +718,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: AppColors.mediumGray,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: AppColors.mediumGray, fontSize: 13),
                 ),
               ],
             ),
@@ -533,11 +730,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 color: AppColors.teal,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.check,
-                color: AppColors.white,
-                size: 16,
-              ),
+              child: Icon(Icons.check, color: AppColors.white, size: 16),
             ),
         ],
       ),
@@ -558,8 +751,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 price: listing.priceUgx,
                 imageUrl: listing.primaryImageUrl,
                 vendorName: _displayVendorName,
-                vendorLocation: listing.locationText ?? listing.campus ?? widget.primaryLocation,
-                vendorAvatar: widget.vendorAvatar,
+                vendorLocation:
+                    listing.locationText ??
+                    listing.campus ??
+                    widget.primaryLocation,
+                vendorAvatar: _resolvedVendorAvatarUrl,
                 ownerUserIdHint: listing.ownerUserId,
                 isOwnListingHint: _isOwnVendorProfile,
               ),
@@ -573,7 +769,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -613,10 +809,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'UGX ${listing.priceUgx.toString().replaceAllMapped(
-                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                                (Match m) => '${m[1]},',
-                              )}',
+                          'UGX ${listing.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                           style: TextStyle(
                             color: AppColors.teal,
                             fontSize: 16,
@@ -661,7 +854,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         color: AppColors.lightGray,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Icon(Icons.image_not_supported, color: AppColors.mediumGray, size: 28),
+      child: Icon(
+        Icons.image_not_supported,
+        color: AppColors.mediumGray,
+        size: 28,
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'login.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'models/models.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -18,6 +19,7 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   String _userName = '';
   String _userEmail = '';
+  String? _avatarUrl;
 
   @override
   void initState() {
@@ -34,6 +36,19 @@ class _AccountScreenState extends State<AccountScreen> {
         _userEmail = email ?? '';
       });
     }
+
+    try {
+      final profileResp = await apiClient.dio.get('/users/profile');
+      final profile = UserProfile.fromJson(profileResp.data);
+      final avatar = profile.avatarUrl?.trim();
+      if (mounted) {
+        setState(() {
+          _userName = profile.fullName;
+          _userEmail = profile.email;
+          _avatarUrl = (avatar != null && avatar.isNotEmpty) ? avatar : null;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _logout() async {
@@ -59,11 +74,7 @@ class _AccountScreenState extends State<AccountScreen> {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -83,9 +94,7 @@ class _AccountScreenState extends State<AccountScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -115,14 +124,19 @@ class _AccountScreenState extends State<AccountScreen> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: AppColors.darkGray,
-                      child: Text(
-                        _userName[0].toUpperCase(),
-                        style: const TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22,
-                        ),
-                      ),
+                      backgroundImage: _avatarUrl != null
+                          ? NetworkImage(_avatarUrl!)
+                          : null,
+                      child: _avatarUrl == null
+                          ? Text(
+                              _userName[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                              ),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 16),
                     Column(
@@ -139,7 +153,10 @@ class _AccountScreenState extends State<AccountScreen> {
                         if (_userEmail.isNotEmpty)
                           Text(
                             _userEmail,
-                            style: const TextStyle(color: AppColors.mediumGray, fontSize: 14),
+                            style: const TextStyle(
+                              color: AppColors.mediumGray,
+                              fontSize: 14,
+                            ),
                           ),
                       ],
                     ),
@@ -189,9 +206,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => SavedScreen(),
-                        ),
+                        MaterialPageRoute(builder: (context) => SavedScreen()),
                       );
                     },
                   ),
@@ -201,25 +216,25 @@ class _AccountScreenState extends State<AccountScreen> {
                     child: SizedBox(
                       width: 200,
                       child: ElevatedButton.icon(
-                      onPressed: _logout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: AppColors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        onPressed: _logout,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: AppColors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
                         ),
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.logout, color: AppColors.white),
-                      label: const Text(
-                        'Logout',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        icon: const Icon(Icons.logout, color: AppColors.white),
+                        label: const Text(
+                          'Logout',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
-                    ),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -249,7 +264,7 @@ class _AccountScreenState extends State<AccountScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -265,11 +280,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 color: Colors.black,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                color: AppColors.white,
-                size: 24,
-              ),
+              child: Icon(icon, color: AppColors.white, size: 24),
             ),
             const SizedBox(width: 16),
             // Text Stack
@@ -288,20 +299,13 @@ class _AccountScreenState extends State<AccountScreen> {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      color: AppColors.mediumGray,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
                   ),
                 ],
               ),
             ),
             // Trailing Arrow
-            Icon(
-              Icons.chevron_right,
-              color: AppColors.mediumGray,
-              size: 24,
-            ),
+            Icon(Icons.chevron_right, color: AppColors.mediumGray, size: 24),
           ],
         ),
       ),

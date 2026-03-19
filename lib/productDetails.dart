@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'main.dart';
 import 'vendorProfile.dart';
 import 'inbox.dart';
@@ -50,25 +51,35 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isBookmarked = false;
   bool _isBookmarkLoading = false;
   bool _isChatLoading = false;
+  bool _isListingLoading = false;
+  bool _isListingUnavailable = false;
   int? _ownerUserId;
   int? _myUserId;
   String? _myUserName;
   bool _viewerIdentityLoaded = false;
   String? _ownerPhoneNumber;
+  String? _resolvedVendorAvatarUrl;
+  String? _listingStatusMessage;
   late String _description;
 
   bool get _isOwnListingByName {
     final myUserName = _myUserName?.trim().toLowerCase();
     final vendorName = widget.vendorName.trim().toLowerCase();
-    return myUserName != null && myUserName.isNotEmpty && vendorName.isNotEmpty && myUserName == vendorName;
+    return myUserName != null &&
+        myUserName.isNotEmpty &&
+        vendorName.isNotEmpty &&
+        myUserName == vendorName;
   }
 
   bool get _isOwnListing =>
       widget.isOwnListingHint == true ||
-      (_myUserId != null && _ownerUserId != null && _myUserId == _ownerUserId) ||
+      (_myUserId != null &&
+          _ownerUserId != null &&
+          _myUserId == _ownerUserId) ||
       _isOwnListingByName;
 
-  bool get _showSellerActions => _viewerIdentityLoaded && !_isOwnListing;
+  bool get _showSellerActions =>
+      _viewerIdentityLoaded && !_isOwnListing && !_isListingUnavailable;
 
   final List<String> _images = [];
 
@@ -77,7 +88,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     super.initState();
     _isBookmarked = widget.initiallyBookmarked;
     _ownerUserId = widget.ownerUserIdHint;
+    _resolvedVendorAvatarUrl = widget.vendorAvatar;
     _description = widget.productDescription.trim();
+    _isListingLoading = widget.listingId != null;
     // Show the primary image immediately while fetching the full listing
     if (widget.imageUrl != null) _images.add(widget.imageUrl!);
     if (widget.listingId != null) _fetchListingImages();
@@ -135,17 +148,26 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   Future<void> _fetchListingImages() async {
-    bool shouldTryPublicSearchFallback = _description.isEmpty;
-    bool shouldTryMyListingsFallback = _description.isEmpty;
+    final listingId = widget.listingId;
+    if (listingId == null) return;
+
+    if (mounted) {
+      setState(() {
+        _isListingLoading = true;
+        _isListingUnavailable = false;
+        _listingStatusMessage = null;
+      });
+    }
 
     try {
-      final resp = await apiClient.dio.get('/listings/${widget.listingId}');
+      final resp = await apiClient.dio.get('/listings/$listingId');
       final listing = ListingResponse.fromJson(resp.data);
       final fetchedDescription = (listing.description ?? '').trim();
 
-      _fetchOwnerPhone(listing.ownerUserId);
+      await _fetchOwnerPhone(listing.ownerUserId);
       if (mounted) {
         setState(() {
+          _isListingUnavailable = false;
           _ownerUserId = listing.ownerUserId;
           if (fetchedDescription.isNotEmpty) {
             _description = fetchedDescription;
@@ -160,25 +182,37 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           }
         });
       }
-
-      shouldTryPublicSearchFallback =
-          fetchedDescription.isEmpty && _description.isEmpty;
-      shouldTryMyListingsFallback = shouldTryPublicSearchFallback;
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 404) {
+        final foundInMyListings = await _loadDescriptionFromMyListings();
+        if (mounted) {
+          setState(() {
+            _isListingUnavailable = !foundInMyListings;
+            if (!foundInMyListings) {
+              _listingStatusMessage = 'This listing is no longer active.';
+            }
+          });
+        }
+      } else if (mounted) {
+        setState(() {
+          _listingStatusMessage =
+              'Could not refresh listing details. Showing available information.';
+        });
+      }
     } catch (_) {
-      // Endpoint may be owner-only (403); widget.imageUrl placeholder already in _images
-      shouldTryPublicSearchFallback = _description.isEmpty;
-      shouldTryMyListingsFallback = _description.isEmpty;
-    }
-
-    if (shouldTryPublicSearchFallback) {
-      final resolvedFromPublicSearch =
-          await _loadDescriptionFromPublicSearch();
-      shouldTryMyListingsFallback =
-          !resolvedFromPublicSearch && _description.isEmpty;
-    }
-
-    if (shouldTryMyListingsFallback) {
-      await _loadDescriptionFromMyListings();
+      if (mounted) {
+        setState(() {
+          _listingStatusMessage =
+              'Could not refresh listing details. Showing available information.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isListingLoading = false;
+        });
+      }
     }
   }
 
@@ -186,61 +220,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     try {
       final resp = await apiClient.dio.get('/users/$ownerUserId/public');
       final profile = PublicUserProfile.fromJson(resp.data);
-      if (mounted) setState(() => _ownerPhoneNumber = profile.phoneNumber);
+      if (mounted) {
+        setState(() {
+          _ownerPhoneNumber = profile.phoneNumber;
+          final avatarUrl = profile.avatarUrl?.trim();
+          if (avatarUrl != null && avatarUrl.isNotEmpty) {
+            _resolvedVendorAvatarUrl = avatarUrl;
+          }
+        });
+      }
     } catch (_) {}
   }
 
-  Future<bool> _loadDescriptionFromPublicSearch() async {
+  Future<bool> _loadDescriptionFromMyListings() async {
     final listingId = widget.listingId;
-    final query = widget.productTitle.trim();
-
-    if (listingId == null || query.isEmpty) return false;
-
-    try {
-      final resp = await apiClient.dio.get(
-        '/listings/search',
-        queryParameters: {
-          'query': query,
-          'page': 0,
-          'size': 20,
-        },
-      );
-      final page = ListingPage.fromJson(resp.data);
-
-      ListingCardResponse? match;
-      for (final item in page.items) {
-        if (item.id == listingId) {
-          match = item;
-          break;
-        }
-      }
-
-      if (match == null) return false;
-
-      final publicDescription = (match.description ?? '').trim();
-      if (!mounted) return publicDescription.isNotEmpty;
-
-      setState(() {
-        if (publicDescription.isNotEmpty) {
-          _description = publicDescription;
-        }
-        if (_ownerUserId == null && match?.ownerUserId != null) {
-          _ownerUserId = match?.ownerUserId;
-        }
-        if (_images.isEmpty && match?.primaryImageUrl != null) {
-          _images.add(match!.primaryImageUrl!);
-        }
-      });
-
-      return publicDescription.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _loadDescriptionFromMyListings() async {
-    final listingId = widget.listingId;
-    if (listingId == null) return;
+    if (listingId == null) return false;
 
     try {
       final resp = await apiClient.dio.get(
@@ -257,15 +251,36 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         if (id != listingId) continue;
 
         final description = (raw['description'] ?? '').toString().trim();
-        if (description.isNotEmpty && mounted) {
+        final ownerIdRaw = raw['ownerUserId'];
+        final ownerId = ownerIdRaw is int
+            ? ownerIdRaw
+            : int.tryParse(ownerIdRaw?.toString() ?? '');
+        final primaryImageUrl = (raw['primaryImageUrl'] ?? '')
+            .toString()
+            .trim();
+
+        if (ownerId != null) {
+          await _fetchOwnerPhone(ownerId);
+        }
+
+        if (mounted) {
           setState(() {
-            _description = description;
+            _ownerUserId ??= ownerId;
+            if (description.isNotEmpty) {
+              _description = description;
+            }
+            if (_images.isEmpty && primaryImageUrl.isNotEmpty) {
+              _images.add(primaryImageUrl);
+            }
           });
         }
-        break;
+        return true;
       }
+
+      return false;
     } catch (_) {
-      // Ignore fallback failures; UI already handles empty state.
+      // Ignore fallback failures; UI already handles unavailable state.
+      return false;
     }
   }
 
@@ -274,17 +289,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     setState(() => _isBookmarkLoading = true);
     try {
       if (_isBookmarked) {
-        await apiClient.dio.delete('/bookmarks', queryParameters: {'listingId': widget.listingId});
+        await apiClient.dio.delete(
+          '/bookmarks',
+          queryParameters: {'listingId': widget.listingId},
+        );
         if (mounted) setState(() => _isBookmarked = false);
       } else {
-        await apiClient.dio.post('/bookmarks', data: {'listingId': widget.listingId});
+        await apiClient.dio.post(
+          '/bookmarks',
+          data: {'listingId': widget.listingId},
+        );
         if (mounted) setState(() => _isBookmarked = true);
       }
       bookmarkUpdateNotifier.value++;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isBookmarked ? 'Added to saved items' : 'Removed from saved items'),
+            content: Text(
+              _isBookmarked
+                  ? 'Added to saved items'
+                  : 'Removed from saved items',
+            ),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -298,7 +323,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     if (widget.listingId == null) return;
     setState(() => _isChatLoading = true);
     try {
-      final resp = await apiClient.dio.post('/conversations', data: {'listingId': widget.listingId});
+      final resp = await apiClient.dio.post(
+        '/conversations',
+        data: {'listingId': widget.listingId},
+      );
       final conv = ConversationResponse.fromJson(resp.data);
       if (mounted) {
         Navigator.push(
@@ -307,8 +335,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             builder: (context) => InboxScreen(
               conversationId: conv.id,
               userName: widget.vendorName,
-              avatarUrl: widget.vendorAvatar,
+              avatarUrl: _resolvedVendorAvatarUrl ?? widget.vendorAvatar,
               phoneNumber: _ownerPhoneNumber,
+              counterpartUserId: _ownerUserId ?? conv.posterUserId,
               productTitle: widget.productTitle,
               productImage: widget.imageUrl,
               productPrice: widget.price,
@@ -321,7 +350,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       // Fallback: open with a dummy conversationId of 0 (will fail to load msgs gracefully)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open chat. Please try again.')),
+          const SnackBar(
+            content: Text('Could not open chat. Please try again.'),
+          ),
         );
       }
     }
@@ -333,6 +364,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final descriptionText = _description.trim();
     final shouldShowDescriptionToggle =
         descriptionText.length > _descriptionToggleThreshold;
+    final listingStatusMessage = _listingStatusMessage?.trim();
+    final hasListingStatusMessage =
+        listingStatusMessage != null && listingStatusMessage.isNotEmpty;
+    final vendorAvatarUrl =
+        (_resolvedVendorAvatarUrl?.trim().isNotEmpty == true)
+        ? _resolvedVendorAvatarUrl
+        : widget.vendorAvatar;
 
     return Scaffold(
       backgroundColor: AppColors.lightGray,
@@ -341,425 +379,495 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         bottom: false,
         child: Stack(
           children: [
-          // Main Content
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image Gallery
-                Stack(
-                  children: [
-                    // Image
-                    if (_images.isEmpty)
-                      Container(
-                        height: 400,
-                        width: double.infinity,
-                        color: AppColors.lightGray,
-                        child: const Center(
-                          child: Icon(
-                            Icons.image_not_supported_outlined,
-                            size: 80,
-                            color: AppColors.mediumGray,
+            // Main Content
+            SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Image Gallery
+                  Stack(
+                    children: [
+                      // Image
+                      if (_images.isEmpty)
+                        Container(
+                          height: 400,
+                          width: double.infinity,
+                          color: AppColors.lightGray,
+                          child: const Center(
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 80,
+                              color: AppColors.mediumGray,
+                            ),
                           ),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        height: 400,
-                        width: double.infinity,
-                        child: PageView.builder(
-                          itemCount: _images.length,
-                          onPageChanged: (index) {
-                            setState(() {
-                              _currentImageIndex = index;
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            return Image.network(
-                              _images[index],
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: AppColors.lightGray,
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.image_not_supported_outlined,
-                                    size: 80,
-                                    color: AppColors.mediumGray,
-                                  ),
-                                ),
-                              ),
-                              loadingBuilder: (_, child, progress) {
-                                if (progress == null) return child;
-                                return Container(
+                        )
+                      else
+                        SizedBox(
+                          height: 400,
+                          width: double.infinity,
+                          child: PageView.builder(
+                            itemCount: _images.length,
+                            onPageChanged: (index) {
+                              setState(() {
+                                _currentImageIndex = index;
+                              });
+                            },
+                            itemBuilder: (context, index) {
+                              return Image.network(
+                                _images[index],
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                errorBuilder: (_, __, ___) => Container(
                                   color: AppColors.lightGray,
                                   child: const Center(
-                                    child: CircularProgressIndicator(),
+                                    child: Icon(
+                                      Icons.image_not_supported_outlined,
+                                      size: 80,
+                                      color: AppColors.mediumGray,
+                                    ),
+                                  ),
+                                ),
+                                loadingBuilder: (_, child, progress) {
+                                  if (progress == null) return child;
+                                  return Container(
+                                    color: AppColors.lightGray,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      // Back Button
+                      Positioned(
+                        top: 50,
+                        left: 16,
+                        child: GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_back,
+                              color: AppColors.darkGray,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Page Indicators
+                      if (_images.isNotEmpty)
+                        Positioned(
+                          bottom: 20,
+                          left: 0,
+                          right: 0,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              _images.length,
+                              (index) => Container(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _currentImageIndex == index
+                                      ? AppColors.teal
+                                      : AppColors.lightGray,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  // Product Information Section
+                  Transform.translate(
+                    offset: const Offset(0, -24),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(24),
+                          topRight: Radius.circular(24),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Product Title
+                            Text(
+                              widget.productTitle,
+                              style: TextStyle(
+                                color: AppColors.darkGray,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_isListingLoading) ...[
+                              const LinearProgressIndicator(),
+                              const SizedBox(height: 12),
+                            ],
+                            if (hasListingStatusMessage) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: _isListingUnavailable
+                                      ? Colors.orange.shade50
+                                      : Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: _isListingUnavailable
+                                        ? Colors.orange.shade200
+                                        : Colors.red.shade200,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      _isListingUnavailable
+                                          ? Icons.info_outline
+                                          : Icons.wifi_off,
+                                      size: 18,
+                                      color: _isListingUnavailable
+                                          ? Colors.orange.shade700
+                                          : Colors.red.shade700,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        listingStatusMessage,
+                                        style: TextStyle(
+                                          color: _isListingUnavailable
+                                              ? Colors.orange.shade900
+                                              : Colors.red.shade900,
+                                          fontSize: 13,
+                                          height: 1.35,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ] else
+                              const SizedBox(height: 16),
+                            // Description
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  descriptionText.isNotEmpty
+                                      ? descriptionText
+                                      : 'No description provided.',
+                                  style: TextStyle(
+                                    color: AppColors.mediumGray,
+                                    fontSize: 15,
+                                    height: 1.5,
+                                  ),
+                                  maxLines:
+                                      shouldShowDescriptionToggle &&
+                                          !_isDescriptionExpanded
+                                      ? 3
+                                      : null,
+                                  overflow:
+                                      shouldShowDescriptionToggle &&
+                                          !_isDescriptionExpanded
+                                      ? TextOverflow.ellipsis
+                                      : null,
+                                ),
+                                if (shouldShowDescriptionToggle) ...[
+                                  const SizedBox(height: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _isDescriptionExpanded =
+                                            !_isDescriptionExpanded;
+                                      });
+                                    },
+                                    child: Text(
+                                      _isDescriptionExpanded
+                                          ? 'Show Less'
+                                          : 'Read More',
+                                      style: TextStyle(
+                                        color: AppColors.teal,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            // Price and Bookmark Row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'UGX ${widget.price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+                                  style: TextStyle(
+                                    color: AppColors.teal,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (_showSellerActions)
+                                  GestureDetector(
+                                    onTap: _isBookmarkLoading
+                                        ? null
+                                        : _toggleBookmark,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: AppColors.lightGray,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: _isBookmarkLoading
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Icon(
+                                              _isBookmarked
+                                                  ? Icons.bookmark
+                                                  : Icons.bookmark_border,
+                                              color: _isBookmarked
+                                                  ? AppColors.teal
+                                                  : AppColors.mediumGray,
+                                              size: 24,
+                                            ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            // Vendor Information Card
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => VendorProfileScreen(
+                                      vendorName: widget.vendorName,
+                                      vendorAvatar: vendorAvatarUrl,
+                                      primaryLocation: widget.vendorLocation,
+                                      vendorUserId: _ownerUserId,
+                                      listingId: widget.listingId,
+                                    ),
                                   ),
                                 );
                               },
-                            );
-                          },
-                        ),
-                      ),
-                    // Back Button
-                    Positioned(
-                      top: 50,
-                      left: 16,
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.arrow_back,
-                            color: AppColors.darkGray,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Page Indicators
-                    if (_images.isNotEmpty)
-                    Positioned(
-                      bottom: 20,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          _images.length,
-                          (index) => Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _currentImageIndex == index
-                                  ? AppColors.teal
-                                  : AppColors.lightGray,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                // Product Information Section
-                Transform.translate(
-                  offset: const Offset(0, -24),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Product Title
-                          Text(
-                            widget.productTitle,
-                            style: TextStyle(
-                              color: AppColors.darkGray,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Description
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                descriptionText.isNotEmpty
-                                    ? descriptionText
-                                    : 'No description provided.',
-                                style: TextStyle(
-                                  color: AppColors.mediumGray,
-                                  fontSize: 15,
-                                  height: 1.5,
-                                ),
-                                maxLines: shouldShowDescriptionToggle && !_isDescriptionExpanded
-                                    ? 3
-                                    : null,
-                                overflow: shouldShowDescriptionToggle && !_isDescriptionExpanded
-                                    ? TextOverflow.ellipsis
-                                    : null,
-                              ),
-                              if (shouldShowDescriptionToggle) ...[
-                                const SizedBox(height: 8),
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _isDescriptionExpanded =
-                                          !_isDescriptionExpanded;
-                                    });
-                                  },
-                                  child: Text(
-                                    _isDescriptionExpanded
-                                        ? 'Show Less'
-                                        : 'Read More',
-                                    style: TextStyle(
-                                      color: AppColors.teal,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.white,
+                                  border: Border.all(
+                                    color: AppColors.lightGray,
+                                    width: 1,
                                   ),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          // Price and Bookmark Row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'UGX ${widget.price.toString().replaceAllMapped(
-                                      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                                      (Match m) => '${m[1]},',
-                                    )}',
-                                style: TextStyle(
-                                  color: AppColors.teal,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              if (_showSellerActions)
-                              GestureDetector(
-                                onTap: _isBookmarkLoading ? null : _toggleBookmark,
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.white,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppColors.lightGray,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: _isBookmarkLoading
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : Icon(
-                                          _isBookmarked
-                                              ? Icons.bookmark
-                                              : Icons.bookmark_border,
-                                          color: _isBookmarked
-                                              ? AppColors.teal
-                                              : AppColors.mediumGray,
-                                          size: 24,
-                                        ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          // Vendor Information Card
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => VendorProfileScreen(
-                                    vendorName: widget.vendorName,
-                                    vendorAvatar: widget.vendorAvatar,
-                                    primaryLocation: widget.vendorLocation,
-                                    vendorUserId: _ownerUserId,
-                                    listingId: widget.listingId,
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                border: Border.all(
-                                  color: AppColors.lightGray,
-                                  width: 1,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            child: Row(
-                              children: [
-                                // Avatar with Verification Badge
-                                Stack(
+                                child: Row(
                                   children: [
-                                    widget.vendorAvatar != null
-                                        ? CircleAvatar(
-                                            radius: 28,
-                                            backgroundImage: NetworkImage(widget.vendorAvatar!),
-                                          )
-                                        : CircleAvatar(
-                                            radius: 28,
-                                            backgroundColor: AppColors.darkGray,
-                                            child: Text(
-                                              widget.vendorName.isNotEmpty
-                                                  ? widget.vendorName[0].toUpperCase()
-                                                  : '?',
-                                              style: const TextStyle(
+                                    // Avatar with Verification Badge
+                                    Stack(
+                                      children: [
+                                        vendorAvatarUrl != null
+                                            ? CircleAvatar(
+                                                radius: 28,
+                                                backgroundImage: NetworkImage(
+                                                  vendorAvatarUrl,
+                                                ),
+                                              )
+                                            : CircleAvatar(
+                                                radius: 28,
+                                                backgroundColor:
+                                                    AppColors.darkGray,
+                                                child: Text(
+                                                  widget.vendorName.isNotEmpty
+                                                      ? widget.vendorName[0]
+                                                            .toUpperCase()
+                                                      : '?',
+                                                  style: const TextStyle(
+                                                    color: AppColors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18,
+                                                  ),
+                                                ),
+                                              ),
+                                        if (widget.isVerified)
+                                          Positioned(
+                                            bottom: 0,
+                                            right: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
                                                 color: AppColors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 18,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.verified,
+                                                color: Colors.blue,
+                                                size: 16,
                                               ),
                                             ),
                                           ),
-                                    if (widget.isVerified)
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.white,
-                                            shape: BoxShape.circle,
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // Vendor Info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            widget.vendorName,
+                                            style: TextStyle(
+                                              color: AppColors.darkGray,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
-                                          child: Icon(
-                                            Icons.verified,
-                                            color: Colors.blue,
-                                            size: 16,
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.location_on,
+                                                size: 14,
+                                                color: AppColors.mediumGray,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                widget.vendorLocation,
+                                                style: TextStyle(
+                                                  color: AppColors.mediumGray,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
                                           ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Rating Badge
+                                    if (widget.vendorRating != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.shade50,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.star,
+                                              size: 14,
+                                              color: Colors.amber.shade700,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              widget.vendorRating!.toString(),
+                                              style: TextStyle(
+                                                color: AppColors.teal,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                   ],
                                 ),
-                                const SizedBox(width: 12),
-                                // Vendor Info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        widget.vendorName,
-                                        style: TextStyle(
-                                          color: AppColors.darkGray,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.location_on,
-                                            size: 14,
-                                            color: AppColors.mediumGray,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            widget.vendorLocation,
-                                            style: TextStyle(
-                                              color: AppColors.mediumGray,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Rating Badge
-                                if (widget.vendorRating != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.star,
-                                        size: 14,
-                                        color: Colors.amber.shade700,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        widget.vendorRating!.toString(),
-                                        style: TextStyle(
-                                          color: AppColors.teal,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
+                            const SizedBox(height: 100),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Bottom Action Button
+            if (_showSellerActions)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _isChatLoading ? null : _startConversation,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.teal,
+                      foregroundColor: AppColors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: _isChatLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: AppColors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.chat_bubble_outline,
+                            color: AppColors.white,
+                            size: 20,
                           ),
-                          ),
-                          const SizedBox(height: 100),
-                        ],
+                    label: const Text(
+                      'Message Vendor',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          // Bottom Action Button
-          if (_showSellerActions)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
               ),
-              child: ElevatedButton.icon(
-                onPressed: _isChatLoading ? null : _startConversation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.teal,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  elevation: 0,
-                ),
-                icon: _isChatLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          color: AppColors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.chat_bubble_outline, color: AppColors.white, size: 20),
-                label: const Text(
-                  'Message Vendor',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ),
           ],
         ),
       ),

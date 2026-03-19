@@ -38,10 +38,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final resp = await apiClient.dio.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
+      final resp = await apiClient.dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
       final auth = AuthResponse.fromJson(resp.data);
       await apiClient.saveToken(auth.token);
       await authService.saveSession(
@@ -59,10 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ex.message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -97,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 20,
                         offset: const Offset(0, 4),
                       ),
@@ -126,10 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Subtext
                 Text(
                   'Sign in to find a good deal',
-                  style: TextStyle(
-                    color: AppColors.mediumGray,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: AppColors.mediumGray, fontSize: 16),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
@@ -151,9 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: 'studentNumber@must.ac.ug',
-                        hintStyle: TextStyle(
-                          color: AppColors.lightGray,
-                        ),
+                        hintStyle: TextStyle(color: AppColors.lightGray),
                         suffixIcon: Icon(
                           Icons.mail_outline,
                           color: AppColors.mediumGray,
@@ -162,15 +154,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         fillColor: AppColors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -206,9 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         hintText: '........',
-                        hintStyle: TextStyle(
-                          color: AppColors.lightGray,
-                        ),
+                        hintStyle: TextStyle(color: AppColors.lightGray),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isPasswordVisible
@@ -226,15 +212,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         fillColor: AppColors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -299,10 +281,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                   child: Text(
                     'Forgot Password?',
-                    style: TextStyle(
-                      color: AppColors.mediumGray,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
                   ),
                 ),
                 const SizedBox(height: 40),

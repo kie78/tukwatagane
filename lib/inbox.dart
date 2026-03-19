@@ -5,6 +5,7 @@ import 'vendorProfile.dart';
 import 'productDetails.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/api_client.dart';
+import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
 import 'core/stomp_service.dart';
 import 'models/models.dart';
@@ -49,22 +50,33 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   List<MessageResponse> _messages = [];
   int? _myUserId;
   StompUnsubscribe? _stompUnsub;
-  int _tempMsgId = -1;      // local counter for optimistic message IDs
-  int _pendingEchos = 0;    // optimistic messages awaiting STOMP confirmation
+  int _tempMsgId = -1; // local counter for optimistic message IDs
+  int _pendingEchos = 0; // optimistic messages awaiting STOMP confirmation
 
   // Product reference card state (populated from widget params or fetched)
   String? _productTitle;
   String? _productImageUrl;
   int? _productPrice;
+  String? _resolvedAvatarUrl;
+
+  String? get _effectiveAvatarUrl {
+    final resolved = _resolvedAvatarUrl?.trim();
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final provided = widget.avatarUrl?.trim();
+    if (provided != null && provided.isNotEmpty) return provided;
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
+    _resolvedAvatarUrl = widget.avatarUrl;
     _init();
   }
 
   Future<void> _init() async {
     _myUserId = await authService.getUserId();
+    await _loadCounterpartAvatar();
     // Use widget params if available; otherwise fetch from API
     if (widget.productTitle != null) {
       setState(() {
@@ -77,6 +89,20 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     }
     await _loadMessages();
     _connectStomp();
+  }
+
+  Future<void> _loadCounterpartAvatar() async {
+    final existingAvatar = _resolvedAvatarUrl?.trim();
+    if (existingAvatar != null && existingAvatar.isNotEmpty) return;
+
+    final resolved = await avatarResolver.resolveAvatarUrl(
+      widget.counterpartUserId,
+    );
+    if (!mounted) return;
+    final avatar = resolved?.trim();
+    if (avatar != null && avatar.isNotEmpty) {
+      setState(() => _resolvedAvatarUrl = avatar);
+    }
   }
 
   Future<void> _fetchListingDetails(int listingId) async {
@@ -119,8 +145,9 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         if (msg.senderUserId == _myUserId && _pendingEchos > 0) {
           // Replace the matching optimistic message with the confirmed one
           setState(() {
-            final idx = _messages
-                .indexWhere((m) => m.id < 0 && m.body == msg.body);
+            final idx = _messages.indexWhere(
+              (m) => m.id < 0 && m.body == msg.body,
+            );
             if (idx >= 0) {
               _messages[idx] = msg;
             } else {
@@ -246,7 +273,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       if (mounted) {
         setState(() => _messages.removeWhere((m) => m.id == tempId));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Send failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Send failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -254,14 +284,13 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final avatarUrl = _effectiveAvatarUrl;
+
     return Scaffold(
       backgroundColor: AppColors.lightGray,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: AppColors.darkGray,
-          ),
+          icon: const Icon(Icons.arrow_back, color: AppColors.darkGray),
           onPressed: () {
             Navigator.pop(context);
           },
@@ -276,7 +305,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                   MaterialPageRoute(
                     builder: (context) => VendorProfileScreen(
                       vendorName: widget.userName,
-                      vendorAvatar: widget.avatarUrl,
+                      vendorAvatar: avatarUrl,
                       isOnline: widget.isOnline,
                       listingId: widget.productListingId,
                       vendorUserId: widget.counterpartUserId,
@@ -286,10 +315,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               },
               child: Stack(
                 children: [
-                  if (widget.avatarUrl != null)
+                  if (avatarUrl != null)
                     CircleAvatar(
                       radius: 20,
-                      backgroundImage: NetworkImage(widget.avatarUrl!),
+                      backgroundImage: NetworkImage(avatarUrl),
                     )
                   else if (widget.businessName != null)
                     CircleAvatar(
@@ -314,7 +343,6 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                         ),
                       ),
                     ),
-
                 ],
               ),
             ),
@@ -351,8 +379,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             child: Column(
               children: [
                 // Product Reference Card (if available)
-                if (_productTitle != null)
-                  _buildProductReferenceCard(),
+                if (_productTitle != null) _buildProductReferenceCard(),
                 // Messages or Empty State
                 Expanded(
                   child: _messages.isEmpty
@@ -363,13 +390,21 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
                             final message = _messages[index];
-                            final isOutgoing = message.senderUserId == _myUserId;
+                            final isOutgoing =
+                                message.senderUserId == _myUserId;
                             final timeStr = _formatTime(message.createdAt);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
                               child: isOutgoing
-                                  ? _buildOutgoingMessage(message.body, timeStr, isDelivered: true)
-                                  : _buildIncomingMessage(message.body, timeStr),
+                                  ? _buildOutgoingMessage(
+                                      message.body,
+                                      timeStr,
+                                      isDelivered: true,
+                                    )
+                                  : _buildIncomingMessage(
+                                      message.body,
+                                      timeStr,
+                                    ),
                             );
                           },
                         ),
@@ -384,7 +419,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               color: AppColors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -2),
                 ),
@@ -472,13 +507,19 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 ),
                 child: Text(
                   message,
-                  style: const TextStyle(color: AppColors.darkGray, fontSize: 14),
+                  style: const TextStyle(
+                    color: AppColors.darkGray,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 timestamp,
-                style: const TextStyle(color: AppColors.mediumGray, fontSize: 11),
+                style: const TextStyle(
+                  color: AppColors.mediumGray,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -508,10 +549,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 ),
                 child: Text(
                   message,
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: AppColors.white, fontSize: 14),
                 ),
               ),
               const SizedBox(height: 4),
@@ -520,18 +558,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 children: [
                   Text(
                     timestamp,
-                    style: TextStyle(
-                      color: AppColors.mediumGray,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: AppColors.mediumGray, fontSize: 11),
                   ),
                   if (isDelivered) ...[
                     const SizedBox(width: 4),
-                    Icon(
-                      Icons.done_all,
-                      size: 14,
-                      color: AppColors.mediumGray,
-                    ),
+                    Icon(Icons.done_all, size: 14, color: AppColors.mediumGray),
                   ],
                 ],
               ),
@@ -552,7 +583,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             Icon(
               Icons.chat_bubble_outline,
               size: 64,
-              color: AppColors.mediumGray.withOpacity(0.5),
+              color: AppColors.mediumGray.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
@@ -568,10 +599,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 8),
               Text(
                 widget.businessName!,
-                style: TextStyle(
-                  color: AppColors.mediumGray,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -579,10 +607,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 4),
               Text(
                 widget.phoneNumber!,
-                style: TextStyle(
-                  color: AppColors.mediumGray,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -596,18 +621,20 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     return GestureDetector(
       onTap: widget.productListingId != null
           ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProductDetailsScreen(
-                    listingId: widget.productListingId,
-                    productTitle: _productTitle!,
-                    price: _productPrice ?? 0,
-                    imageUrl: _productImageUrl,
-                    vendorName: widget.userName,
-                    vendorLocation: '',
-                  ),
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProductDetailsScreen(
+                  listingId: widget.productListingId,
+                  productTitle: _productTitle!,
+                  price: _productPrice ?? 0,
+                  imageUrl: _productImageUrl,
+                  vendorName: widget.userName,
+                  vendorAvatar: _effectiveAvatarUrl,
+                  vendorLocation: '',
+                  ownerUserIdHint: widget.counterpartUserId,
                 ),
-              )
+              ),
+            )
           : null,
       child: Container(
         margin: const EdgeInsets.all(16),
@@ -651,21 +678,17 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (_productPrice != null) ...
-                      [
-                        const SizedBox(height: 4),
-                        Text(
-                          'UGX ${_productPrice!.toString().replaceAllMapped(
-                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                                (Match m) => '${m[1]},',
-                              )}',
-                          style: const TextStyle(
-                            color: AppColors.teal,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                    if (_productPrice != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'UGX ${_productPrice!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+                        style: const TextStyle(
+                          color: AppColors.teal,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
-                      ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -681,10 +704,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       width: 80,
       height: 80,
       color: AppColors.lightGray,
-      child: const Icon(Icons.image_not_supported_outlined,
-          color: AppColors.mediumGray, size: 32),
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        color: AppColors.mediumGray,
+        size: 32,
+      ),
     );
   }
 }
-
-

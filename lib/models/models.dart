@@ -18,12 +18,12 @@ class AuthUser {
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> j) => AuthUser(
-        id: j['id'],
-        fullName: j['fullName'],
-        email: j['email'],
-        registrationNumber: j['registrationNumber'],
-        phoneNumber: j['phoneNumber'],
-      );
+    id: j['id'],
+    fullName: j['fullName'],
+    email: j['email'],
+    registrationNumber: j['registrationNumber'],
+    phoneNumber: j['phoneNumber'],
+  );
 }
 
 class AuthResponse {
@@ -32,10 +32,8 @@ class AuthResponse {
 
   const AuthResponse({required this.token, required this.user});
 
-  factory AuthResponse.fromJson(Map<String, dynamic> j) => AuthResponse(
-        token: j['token'],
-        user: AuthUser.fromJson(j['user']),
-      );
+  factory AuthResponse.fromJson(Map<String, dynamic> j) =>
+      AuthResponse(token: j['token'], user: AuthUser.fromJson(j['user']));
 }
 
 // ─────────────────────────────────────────────────────
@@ -52,10 +50,10 @@ class LocationDto {
   Map<String, dynamic> toJson() => {'label': label, 'lat': lat, 'lng': lng};
 
   factory LocationDto.fromJson(Map<String, dynamic> j) => LocationDto(
-        label: j['label'],
-        lat: j['lat']?.toDouble(),
-        lng: j['lng']?.toDouble(),
-      );
+    label: j['label'],
+    lat: j['lat']?.toDouble(),
+    lng: j['lng']?.toDouble(),
+  );
 }
 
 class UserProfile {
@@ -82,26 +80,27 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
-        id: j['id'],
-        fullName: j['fullName'],
-        email: j['email'],
-        registrationNumber: j['registrationNumber'],
-        phoneNumber: j['phoneNumber'],
-        campus: j['campus'],
-        avatarUrl: j['avatarUrl'],
-        registeredLocation: j['registeredLocation'] != null
-            ? LocationDto.fromJson(j['registeredLocation'])
-            : null,
-        alternateLocation: j['alternateLocation'] != null
-            ? LocationDto.fromJson(j['alternateLocation'])
-            : null,
-      );
+    id: j['id'],
+    fullName: j['fullName'],
+    email: j['email'],
+    registrationNumber: j['registrationNumber'],
+    phoneNumber: j['phoneNumber'],
+    campus: j['campus'],
+    avatarUrl: j['avatarUrl'],
+    registeredLocation: j['registeredLocation'] != null
+        ? LocationDto.fromJson(j['registeredLocation'])
+        : null,
+    alternateLocation: j['alternateLocation'] != null
+        ? LocationDto.fromJson(j['alternateLocation'])
+        : null,
+  );
 }
 
 class PublicUserProfile {
   final int id;
   final String fullName;
   final String? campus;
+  final String? avatarUrl;
   final int activeListingsCount;
   final DateTime memberSince;
   final String? email;
@@ -111,6 +110,7 @@ class PublicUserProfile {
     required this.id,
     required this.fullName,
     this.campus,
+    this.avatarUrl,
     required this.activeListingsCount,
     required this.memberSince,
     this.email,
@@ -122,6 +122,7 @@ class PublicUserProfile {
         id: j['id'],
         fullName: j['fullName'],
         campus: j['campus'],
+        avatarUrl: j['avatarUrl'],
         activeListingsCount: j['activeListingsCount'],
         memberSince: DateTime.parse(j['memberSince']),
         email: j['email'],
@@ -151,12 +152,12 @@ class ListingActions {
   });
 
   factory ListingActions.fromJson(Map<String, dynamic> j) => ListingActions(
-        canEdit: j['canEdit'] ?? false,
-        canMarkSold: j['canMarkSold'] ?? false,
-        canDelete: j['canDelete'] ?? false,
-        canRestore: j['canRestore'] ?? false,
-        canPurge: j['canPurge'] ?? false,
-      );
+    canEdit: j['canEdit'] ?? false,
+    canMarkSold: j['canMarkSold'] ?? false,
+    canDelete: j['canDelete'] ?? false,
+    canRestore: j['canRestore'] ?? false,
+    canPurge: j['canPurge'] ?? false,
+  );
 }
 
 class ListingImageResponse {
@@ -227,23 +228,23 @@ class ListingResponse {
   });
 
   factory ListingResponse.fromJson(Map<String, dynamic> j) => ListingResponse(
-        id: j['id'],
-        ownerUserId: j['ownerUserId'],
-        title: j['title'],
-        priceUgx: j['priceUgx'],
-        currency: j['currency'],
-        categoryCode: j['categoryCode'],
-        description: j['description'],
-        locationText: j['locationText'],
-        campus: j['campus'],
-        status: ListingStatus.values.byName(j['status']),
-        actions: ListingActions.fromJson(j['actions'] ?? {}),
-        createdAt: DateTime.parse(j['createdAt']),
-        primaryImageUrl: j['primaryImageUrl'],
-        images: (j['images'] as List? ?? [])
-            .map((e) => ListingImageResponse.fromJson(e))
-            .toList(),
-      );
+    id: j['id'],
+    ownerUserId: j['ownerUserId'],
+    title: j['title'],
+    priceUgx: j['priceUgx'],
+    currency: j['currency'],
+    categoryCode: j['categoryCode'],
+    description: j['description'],
+    locationText: j['locationText'],
+    campus: j['campus'],
+    status: ListingStatus.values.byName(j['status']),
+    actions: ListingActions.fromJson(j['actions'] ?? {}),
+    createdAt: DateTime.parse(j['createdAt']),
+    primaryImageUrl: j['primaryImageUrl'],
+    images: (j['images'] as List? ?? [])
+        .map((e) => ListingImageResponse.fromJson(e))
+        .toList(),
+  );
 }
 
 class ListingCardResponse {
@@ -260,6 +261,7 @@ class ListingCardResponse {
   final double? distanceMeters;
   final String? ownerFullName;
   final int? ownerUserId;
+  final String? ownerAvatarUrl;
   final double? lat;
   final double? lng;
 
@@ -277,6 +279,7 @@ class ListingCardResponse {
     this.distanceMeters,
     this.ownerFullName,
     this.ownerUserId,
+    this.ownerAvatarUrl,
     this.lat,
     this.lng,
   });
@@ -296,6 +299,8 @@ class ListingCardResponse {
         distanceMeters: j['distanceMeters']?.toDouble(),
         ownerFullName: j['ownerFullName'],
         ownerUserId: j['ownerUserId'],
+        ownerAvatarUrl:
+            (j['ownerAvatarUrl'] ?? j['ownerAvatar'])?.toString(),
         lat: j['lat']?.toDouble(),
         lng: j['lng']?.toDouble(),
       );
@@ -315,13 +320,13 @@ class ListingPage {
   });
 
   factory ListingPage.fromJson(Map<String, dynamic> j) => ListingPage(
-        items: (j['items'] as List)
-            .map((e) => ListingCardResponse.fromJson(e))
-            .toList(),
-        page: j['page'],
-        size: j['size'],
-        total: j['total'],
-      );
+    items: (j['items'] as List)
+        .map((e) => ListingCardResponse.fromJson(e))
+        .toList(),
+    page: j['page'],
+    size: j['size'],
+    total: j['total'],
+  );
 }
 
 // ─────────────────────────────────────────────────────
@@ -344,12 +349,12 @@ class CategoryResponse {
   });
 
   factory CategoryResponse.fromJson(Map<String, dynamic> j) => CategoryResponse(
-        code: j['code'],
-        displayName: j['displayName'],
-        coverImageUrl: j['coverImageUrl'],
-        activeListingCount: j['activeListingCount'],
-        badge: j['badge'],
-      );
+    code: j['code'],
+    displayName: j['displayName'],
+    coverImageUrl: j['coverImageUrl'],
+    activeListingCount: j['activeListingCount'],
+    badge: j['badge'],
+  );
 }
 
 // ─────────────────────────────────────────────────────
@@ -510,12 +515,12 @@ class MessageResponse {
   });
 
   factory MessageResponse.fromJson(Map<String, dynamic> j) => MessageResponse(
-        id: j['id'],
-        conversationId: j['conversationId'],
-        senderUserId: j['senderUserId'],
-        body: j['body'],
-        createdAt: DateTime.parse(j['createdAt']),
-      );
+    id: j['id'],
+    conversationId: j['conversationId'],
+    senderUserId: j['senderUserId'],
+    body: j['body'],
+    createdAt: DateTime.parse(j['createdAt']),
+  );
 }
 
 // ─────────────────────────────────────────────────────
@@ -572,8 +577,10 @@ class CloudinarySignatureResponse {
         apiKey: j['apiKey'],
         timestamp: j['timestamp'],
         signature: j['signature'],
-        params: (j['params'] as Map<String, dynamic>?)
-                ?.map((k, v) => MapEntry(k, v.toString())) ??
+        params:
+            (j['params'] as Map<String, dynamic>?)?.map(
+              (k, v) => MapEntry(k, v.toString()),
+            ) ??
             {},
       );
 }

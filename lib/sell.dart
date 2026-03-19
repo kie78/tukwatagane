@@ -103,8 +103,11 @@ class _SellScreenState extends State<SellScreen> {
 
   Future<void> _removeExistingImage(ListingImageResponse img) async {
     try {
-      await apiClient.dio.delete('/listings/${widget.editingItemId}/images/${img.id}');
-      if (mounted) setState(() => _existingImages.removeWhere((i) => i.id == img.id));
+      await apiClient.dio.delete(
+        '/listings/${widget.editingItemId}/images/${img.id}',
+      );
+      if (mounted)
+        setState(() => _existingImages.removeWhere((i) => i.id == img.id));
     } catch (_) {}
   }
 
@@ -113,19 +116,24 @@ class _SellScreenState extends State<SellScreen> {
       final resp = await apiClient.dio.get('/users/profile');
       final profile = UserProfile.fromJson(resp.data);
       final loc = profile.registeredLocation ?? profile.alternateLocation;
-      final fallback = loc?.label ?? profile.campus ?? 'Your registered location';
+      final fallback =
+          loc?.label ?? profile.campus ?? 'Your registered location';
       final label = zoneLabel(loc?.lat, loc?.lng, fallback: fallback);
-      if (mounted) setState(() {
-        _registeredLocationLabel = label;
-        _registeredLocationLat = loc?.lat;
-        _registeredLocationLng = loc?.lng;
-        _isLocationLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _registeredLocationLabel = label;
+          _registeredLocationLat = loc?.lat;
+          _registeredLocationLng = loc?.lng;
+          _isLocationLoading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() {
-        _registeredLocationLabel = 'Your registered location';
-        _isLocationLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _registeredLocationLabel = 'Your registered location';
+          _isLocationLoading = false;
+        });
+      }
     }
   }
 
@@ -196,76 +204,117 @@ class _SellScreenState extends State<SellScreen> {
 
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a title'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please enter a title'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (priceText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a price'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please enter a price'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     final price = int.tryParse(priceText.replaceAll(',', ''));
     if (price == null || price <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid price'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please enter a valid price'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select a category'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (!_useRegisteredLocation && _selectedZone == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location zone'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select a location zone'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
     if (_useRegisteredLocation && _isLocationLoading) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your location is still loading, please wait a moment'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Your location is still loading, please wait a moment'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      final categoryCode = _categoryCodeMap[_selectedCategory!] ?? _selectedCategory!;
+      final categoryCode =
+          _categoryCodeMap[_selectedCategory!] ?? _selectedCategory!;
 
       ListingResponse listing;
       if (widget.editingItemId != null) {
-        final centroid = _selectedZone != null ? zoneCentroid(_selectedZone!) : null;
-        final resp = await apiClient.dio.put('/listings/${widget.editingItemId}', data: {
-          'title': title,
-          'priceUgx': price,
-          'categoryCode': categoryCode,
-          'description': description,
-          'locationText': _useRegisteredLocation ? _registeredLocationLabel : (_selectedZone ?? ''),
-          'useRegisteredLocation': _useRegisteredLocation,
-          if (_useRegisteredLocation && _registeredLocationLat != null) 'lat': _registeredLocationLat,
-          if (_useRegisteredLocation && _registeredLocationLng != null) 'lng': _registeredLocationLng,
-          if (!_useRegisteredLocation && centroid != null) 'lat': centroid.lat,
-          if (!_useRegisteredLocation && centroid != null) 'lng': centroid.lng,
-        });
+        final centroid = _selectedZone != null
+            ? zoneCentroid(_selectedZone!)
+            : null;
+        final resp = await apiClient.dio.put(
+          '/listings/${widget.editingItemId}',
+          data: {
+            'title': title,
+            'priceUgx': price,
+            'categoryCode': categoryCode,
+            'description': description,
+            'locationText': _useRegisteredLocation
+                ? _registeredLocationLabel
+                : (_selectedZone ?? ''),
+            'useRegisteredLocation': _useRegisteredLocation,
+            if (_useRegisteredLocation && _registeredLocationLat != null)
+              'lat': _registeredLocationLat,
+            if (_useRegisteredLocation && _registeredLocationLng != null)
+              'lng': _registeredLocationLng,
+            if (!_useRegisteredLocation && centroid != null)
+              'lat': centroid.lat,
+            if (!_useRegisteredLocation && centroid != null)
+              'lng': centroid.lng,
+          },
+        );
         listing = ListingResponse.fromJson(resp.data);
       } else {
-        final centroid = _selectedZone != null ? zoneCentroid(_selectedZone!) : null;
-        final resp = await apiClient.dio.post('/listings', data: {
-          'title': title,
-          'priceUgx': price,
-          'categoryCode': categoryCode,
-          'description': description,
-          'locationText': _useRegisteredLocation ? _registeredLocationLabel : (_selectedZone ?? ''),
-          'useRegisteredLocation': _useRegisteredLocation,
-          if (_useRegisteredLocation && _registeredLocationLat != null) 'lat': _registeredLocationLat,
-          if (_useRegisteredLocation && _registeredLocationLng != null) 'lng': _registeredLocationLng,
-          if (!_useRegisteredLocation && centroid != null) 'lat': centroid.lat,
-          if (!_useRegisteredLocation && centroid != null) 'lng': centroid.lng,
-        });
+        final centroid = _selectedZone != null
+            ? zoneCentroid(_selectedZone!)
+            : null;
+        final resp = await apiClient.dio.post(
+          '/listings',
+          data: {
+            'title': title,
+            'priceUgx': price,
+            'categoryCode': categoryCode,
+            'description': description,
+            'locationText': _useRegisteredLocation
+                ? _registeredLocationLabel
+                : (_selectedZone ?? ''),
+            'useRegisteredLocation': _useRegisteredLocation,
+            if (_useRegisteredLocation && _registeredLocationLat != null)
+              'lat': _registeredLocationLat,
+            if (_useRegisteredLocation && _registeredLocationLng != null)
+              'lng': _registeredLocationLng,
+            if (!_useRegisteredLocation && centroid != null)
+              'lat': centroid.lat,
+            if (!_useRegisteredLocation && centroid != null)
+              'lng': centroid.lng,
+          },
+        );
         listing = ListingResponse.fromJson(resp.data);
       }
 
@@ -274,13 +323,20 @@ class _SellScreenState extends State<SellScreen> {
       for (final img in _selectedImages) {
         try {
           // Step 1: get signed upload credentials from our backend
-          debugPrint('[IMG] Step 1: requesting signature for listing ${listing.id}');
-          final sigResp = await apiClient.dio.post('/uploads/cloudinary/signature', data: {
-            'listingId': listing.id,
-            'folder': 'campusplug/listings/${listing.id}',
-          });
+          debugPrint(
+            '[IMG] Step 1: requesting signature for listing ${listing.id}',
+          );
+          final sigResp = await apiClient.dio.post(
+            '/uploads/cloudinary/signature',
+            data: {
+              'listingId': listing.id,
+              'folder': 'campusplug/listings/${listing.id}',
+            },
+          );
           final sig = CloudinarySignatureResponse.fromJson(sigResp.data);
-          debugPrint('[IMG] Step 1 OK: cloudName=${sig.cloudName}, params=${sig.params}');
+          debugPrint(
+            '[IMG] Step 1 OK: cloudName=${sig.cloudName}, params=${sig.params}',
+          );
 
           // Step 2: upload the file directly to Cloudinary
           debugPrint('[IMG] Step 2: uploading to Cloudinary');
@@ -299,14 +355,17 @@ class _SellScreenState extends State<SellScreen> {
 
           // Step 3: register the image against the listing in our backend
           debugPrint('[IMG] Step 3: registering image with backend');
-          await apiClient.dio.post('/listings/${listing.id}/images', data: {
-            'publicId': cloudData['public_id'],
-            'secureUrl': cloudData['secure_url'],
-            'width': cloudData['width'],
-            'height': cloudData['height'],
-            'bytes': cloudData['bytes'],
-            'format': cloudData['format'],
-          });
+          await apiClient.dio.post(
+            '/listings/${listing.id}/images',
+            data: {
+              'publicId': cloudData['public_id'],
+              'secureUrl': cloudData['secure_url'],
+              'width': cloudData['width'],
+              'height': cloudData['height'],
+              'bytes': cloudData['bytes'],
+              'format': cloudData['format'],
+            },
+          );
           debugPrint('[IMG] Step 3 OK: image registered');
         } catch (e) {
           uploadsFailed++;
@@ -333,9 +392,11 @@ class _SellScreenState extends State<SellScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(widget.editingItemId != null
-                  ? 'Listing updated!'
-                  : 'Listing posted!'),
+              content: Text(
+                widget.editingItemId != null
+                    ? 'Listing updated!'
+                    : 'Listing posted!',
+              ),
               backgroundColor: AppColors.teal,
             ),
           );
@@ -372,11 +433,7 @@ class _SellScreenState extends State<SellScreen> {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -396,9 +453,7 @@ class _SellScreenState extends State<SellScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -420,7 +475,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Image Upload Section
               Container(
                 width: double.infinity,
@@ -487,34 +542,40 @@ class _SellScreenState extends State<SellScreen> {
                         runSpacing: 12,
                         children: [
                           // Existing uploaded images
-                          ..._existingImages.map((img) => Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  img.secureUrl,
-                                  width: 100,
-                                  height: 100,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              Positioned(
-                                top: 4,
-                                right: 4,
-                                child: GestureDetector(
-                                  onTap: () => _removeExistingImage(img),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                          ..._existingImages.map(
+                            (img) => Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    img.secureUrl,
+                                    width: 100,
+                                    height: 100,
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
-                              ),
-                            ],
-                          )),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: () => _removeExistingImage(img),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           // Newly selected images
                           ..._selectedImages.asMap().entries.map((entry) {
                             final index = entry.key;
@@ -541,7 +602,11 @@ class _SellScreenState extends State<SellScreen> {
                                         color: Colors.red,
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -599,7 +664,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Title Field
               const Text(
                 'Title',
@@ -636,7 +701,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Price Field
               const Text(
                 'Price',
@@ -674,7 +739,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Category Field
               const Text(
                 'Category',
@@ -700,11 +765,15 @@ class _SellScreenState extends State<SellScreen> {
                       fillColor: AppColors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.lightGray),
+                        borderSide: const BorderSide(
+                          color: AppColors.lightGray,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.lightGray),
+                        borderSide: const BorderSide(
+                          color: AppColors.lightGray,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -746,7 +815,7 @@ class _SellScreenState extends State<SellScreen> {
                 },
               ),
               const SizedBox(height: 24),
-              
+
               // Description Field
               const Text(
                 'Description',
@@ -796,7 +865,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Location Toggle Card
               Container(
                 padding: const EdgeInsets.all(16),
@@ -847,15 +916,12 @@ class _SellScreenState extends State<SellScreen> {
               ),
               if (!_useRegisteredLocation) ...[
                 const SizedBox(height: 16),
-                
+
                 // OR Divider
                 Row(
                   children: [
                     Expanded(
-                      child: Divider(
-                        color: AppColors.lightGray,
-                        thickness: 1,
-                      ),
+                      child: Divider(color: AppColors.lightGray, thickness: 1),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -868,15 +934,12 @@ class _SellScreenState extends State<SellScreen> {
                       ),
                     ),
                     Expanded(
-                      child: Divider(
-                        color: AppColors.lightGray,
-                        thickness: 1,
-                      ),
+                      child: Divider(color: AppColors.lightGray, thickness: 1),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Use different location label
                 const Text(
                   'Use different location',
@@ -887,7 +950,7 @@ class _SellScreenState extends State<SellScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Alternate Location
                 DropdownButtonFormField<String>(
                   value: _selectedZone,
@@ -940,7 +1003,7 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ],
               const SizedBox(height: 32),
-              
+
               // Post Listing Button
               SizedBox(
                 width: double.infinity,
@@ -966,7 +1029,9 @@ class _SellScreenState extends State<SellScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              widget.editingItemId != null ? 'Update Listing' : 'Post Listing',
+                              widget.editingItemId != null
+                                  ? 'Update Listing'
+                                  : 'Post Listing',
                               style: const TextStyle(
                                 color: AppColors.white,
                                 fontWeight: FontWeight.bold,

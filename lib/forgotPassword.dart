@@ -23,15 +23,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     5,
     (index) => FocusNode(),
   );
-  
+
   final TextEditingController _newPasswordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isCodeSent = false;
   bool _isCodeVerified = false;
   bool _isLoading = false;
 
-  String get _enteredOtp =>
-      _otpControllers.map((c) => c.text).join();
+  String get _enteredOtp => _otpControllers.map((c) => c.text).join();
 
   Future<void> _handleSendCode() async {
     final email = _emailController.text.trim();
@@ -72,12 +71,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await apiClient.dio.post('/auth/reset-password', data: {
-        'email': _emailController.text.trim(),
-        'otp': _enteredOtp,
-        'password': password,
-        'confirmPassword': password,
-      });
+      await apiClient.dio.post(
+        '/auth/reset-password',
+        data: {
+          'email': _emailController.text.trim(),
+          'otp': _enteredOtp,
+          'password': password,
+          'confirmPassword': password,
+        },
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -117,14 +119,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (email.isEmpty) return email;
     final parts = email.split('@');
     if (parts.length != 2) return email;
-    
+
     final username = parts[0];
     final domain = parts[1];
-    
+
     if (username.length <= 2) {
       return '${username[0]}***@$domain';
     }
-    
+
     final visibleChars = username.substring(0, 2);
     return '$visibleChars***@$domain';
   }
@@ -155,7 +157,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           color: AppColors.lightGray,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.mediumGray.withOpacity(0.3),
+                            color: AppColors.mediumGray.withValues(alpha: 0.3),
                             width: 1,
                           ),
                         ),
@@ -216,33 +218,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: '2023example@std.must.ac.ug',
-                        hintStyle: TextStyle(
-                          color: AppColors.lightGray,
-                        ),
+                        hintStyle: TextStyle(color: AppColors.lightGray),
                         suffixIcon: Icon(
                           Icons.mail_outline,
                           color: AppColors.mediumGray,
                         ),
                         filled: true,
-                        fillColor: _isCodeSent 
-                            ? AppColors.lightGray.withOpacity(0.3)
+                        fillColor: _isCodeSent
+                            ? AppColors.lightGray.withValues(alpha: 0.3)
                             : AppColors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: AppColors.lightGray,
-                          ),
+                          borderSide: BorderSide(color: AppColors.lightGray),
                         ),
                         disabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                            color: AppColors.lightGray.withOpacity(0.5),
+                            color: AppColors.lightGray.withValues(alpha: 0.5),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -266,11 +262,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: (_isCodeSent || _isLoading) ? null : _handleSendCode,
+                    onPressed: (_isCodeSent || _isLoading)
+                        ? null
+                        : _handleSendCode,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: AppColors.white,
-                      disabledBackgroundColor: AppColors.mediumGray.withOpacity(0.5),
+                      disabledBackgroundColor: AppColors.mediumGray.withValues(
+                        alpha: 0.5,
+                      ),
                       disabledForegroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -395,7 +395,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,
-                        disabledBackgroundColor: AppColors.mediumGray.withOpacity(0.5),
+                        disabledBackgroundColor: AppColors.mediumGray
+                            .withValues(alpha: 0.5),
                         disabledForegroundColor: AppColors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -443,9 +444,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         obscureText: !_isPasswordVisible,
                         decoration: InputDecoration(
                           hintText: '........',
-                          hintStyle: TextStyle(
-                            color: AppColors.lightGray,
-                          ),
+                          hintStyle: TextStyle(color: AppColors.lightGray),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _isPasswordVisible
@@ -463,15 +462,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           fillColor: AppColors.white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: AppColors.lightGray,
-                            ),
+                            borderSide: BorderSide(color: AppColors.lightGray),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: AppColors.lightGray,
-                            ),
+                            borderSide: BorderSide(color: AppColors.lightGray),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),

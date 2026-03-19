@@ -44,7 +44,10 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final resp = await apiClient.dio.get('/listings/my', queryParameters: {'status': 'ALL'});
+      final resp = await apiClient.dio.get(
+        '/listings/my',
+        queryParameters: {'status': 'ALL'},
+      );
       final items = (resp.data['items'] as List)
           .map((e) => ListingResponse.fromJson(e))
           .toList();
@@ -55,9 +58,18 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
 
   List<ListingResponse> get _filteredListings {
     if (_selectedFilter == 'All') return _allListings;
-    if (_selectedFilter == 'Active') return _allListings.where((item) => item.status == ListingStatus.ACTIVE).toList();
-    if (_selectedFilter == 'Sold') return _allListings.where((item) => item.status == ListingStatus.SOLD).toList();
-    if (_selectedFilter == 'Deleted') return _allListings.where((item) => item.status == ListingStatus.DELETED).toList();
+    if (_selectedFilter == 'Active')
+      return _allListings
+          .where((item) => item.status == ListingStatus.ACTIVE)
+          .toList();
+    if (_selectedFilter == 'Sold')
+      return _allListings
+          .where((item) => item.status == ListingStatus.SOLD)
+          .toList();
+    if (_selectedFilter == 'Deleted')
+      return _allListings
+          .where((item) => item.status == ListingStatus.DELETED)
+          .toList();
     return _allListings;
   }
 
@@ -70,11 +82,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -94,9 +102,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -209,7 +215,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -228,22 +234,22 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: item.primaryImageUrl != null
-                    ? Image.network(
-                        item.primaryImageUrl!,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 80,
-                        height: 80,
-                        color: AppColors.lightGray,
-                        child: const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: AppColors.mediumGray,
-                          size: 28,
+                      ? Image.network(
+                          item.primaryImageUrl!,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          width: 80,
+                          height: 80,
+                          color: AppColors.lightGray,
+                          child: const Icon(
+                            Icons.image_not_supported_outlined,
+                            color: AppColors.mediumGray,
+                            size: 28,
+                          ),
                         ),
-                      ),
                 ),
                 const SizedBox(width: 12),
                 // Content
@@ -295,16 +301,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                       const SizedBox(height: 8),
                       // Price
                       Text(
-                        'UGX ${item.priceUgx.toString().replaceAllMapped(
-                              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                              (Match m) => '${m[1]},',
-                            )}',
+                        'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                         style: TextStyle(
                           color: item.status == ListingStatus.SOLD
                               ? AppColors.mediumGray
                               : item.status == ListingStatus.DELETED
-                                  ? Colors.red
-                                  : AppColors.teal,
+                              ? Colors.red
+                              : AppColors.teal,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           decoration: item.status == ListingStatus.DELETED
@@ -333,7 +336,9 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                           message: 'Do you want to restore this listing?',
                           onConfirm: () async {
                             try {
-                              await apiClient.dio.post('/listings/${item.id}/restore');
+                              await apiClient.dio.post(
+                                '/listings/${item.id}/restore',
+                              );
                               _load();
                             } catch (_) {}
                           },
@@ -352,10 +357,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                         _showConfirmationDialog(
                           context: context,
                           title: 'Purge Listing',
-                          message: 'This will permanently delete this listing. Continue?',
+                          message:
+                              'This will permanently delete this listing. Continue?',
                           onConfirm: () async {
                             try {
-                              await apiClient.dio.post('/listings/${item.id}/purge');
+                              await apiClient.dio.post(
+                                '/listings/${item.id}/purge',
+                              );
                               _load();
                             } catch (_) {}
                           },
@@ -398,22 +406,25 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                     child: _buildActionButton(
                       icon: Icons.edit_outlined,
                       label: 'Edit',
-                      onTap: item.status == ListingStatus.SOLD ? null : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SellScreen(
-                              editingItemId: item.id.toString(),
-                              editingTitle: item.title,
-                              editingPrice: item.priceUgx.toString(),
-                              editingCategory: null,
-                              editingDescription: item.description,
-                              editingLocation: item.locationText ?? item.campus,
-                              editingImageUrl: item.primaryImageUrl,
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: item.status == ListingStatus.SOLD
+                          ? null
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SellScreen(
+                                    editingItemId: item.id.toString(),
+                                    editingTitle: item.title,
+                                    editingPrice: item.priceUgx.toString(),
+                                    editingCategory: null,
+                                    editingDescription: item.description,
+                                    editingLocation:
+                                        item.locationText ?? item.campus,
+                                    editingImageUrl: item.primaryImageUrl,
+                                  ),
+                                ),
+                              );
+                            },
                       color: Color(0xFF1976D2),
                       isDisabled: item.status == ListingStatus.SOLD,
                       hasBorder: true,
@@ -430,10 +441,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                               _showConfirmationDialog(
                                 context: context,
                                 title: 'Delete Listing',
-                                message: 'Are you sure you want to delete this listing?',
+                                message:
+                                    'Are you sure you want to delete this listing?',
                                 onConfirm: () async {
                                   try {
-                                    await apiClient.dio.post('/listings/${item.id}/delete');
+                                    await apiClient.dio.post(
+                                      '/listings/${item.id}/delete',
+                                    );
                                     _load();
                                   } catch (_) {}
                                 },
@@ -457,7 +471,9 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                             message: 'Mark this listing as sold?',
                             onConfirm: () async {
                               try {
-                                await apiClient.dio.post('/listings/${item.id}/sold');
+                                await apiClient.dio.post(
+                                  '/listings/${item.id}/sold',
+                                );
                                 _load();
                               } catch (_) {}
                             },
@@ -514,22 +530,21 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
     bool isDisabled = false,
     bool hasBorder = false,
   }) {
-    final effectiveColor = isDisabled ? AppColors.mediumGray.withOpacity(0.4) : color;
-    
+    final effectiveColor = isDisabled
+        ? AppColors.mediumGray.withValues(alpha: 0.4)
+        : color;
+
     return GestureDetector(
       onTap: isDisabled ? null : onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 8,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: hasBorder
             ? BoxDecoration(
                 color: Colors.transparent,
                 border: Border.all(
                   color: isDisabled
                       ? AppColors.lightGray
-                      : effectiveColor.withOpacity(0.5),
+                      : effectiveColor.withValues(alpha: 0.5),
                   width: 1,
                 ),
                 borderRadius: BorderRadius.circular(6),
@@ -539,11 +554,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: effectiveColor,
-            ),
+            Icon(icon, size: 16, color: effectiveColor),
             const SizedBox(width: 4),
             Flexible(
               child: Text(
@@ -586,10 +597,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
           ),
           content: Text(
             message,
-            style: TextStyle(
-              color: AppColors.mediumGray,
-              fontSize: 15,
-            ),
+            style: TextStyle(color: AppColors.mediumGray, fontSize: 15),
           ),
           actions: [
             TextButton(
@@ -623,10 +631,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
               ),
               child: Text(
                 'Yes',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -636,4 +641,3 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
     );
   }
 }
-

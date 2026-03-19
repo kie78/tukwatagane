@@ -45,6 +45,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _pickProfileImage() async {
     try {
+      if (_profile == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not load profile. Please refresh and try again.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
@@ -59,49 +73,94 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isUploadingAvatar = true;
       });
 
-      // Step 1: get a signed upload token from the backend.
-      // The signature endpoint requires a non-null listingId; we pass the
-      // user's own id as a workaround since there is no dedicated avatar
-      // upload endpoint yet. The folder param controls the Cloudinary path.
+      // Step 1: request an avatar-scoped signature.
       late CloudinarySignatureResponse sig;
       try {
-        final sigResp = await apiClient.dio.post('/uploads/cloudinary/signature', data: {
-          'listingId': _profile!.id,
-          'folder': 'campusplug/users/${_profile!.id}/avatar',
-        });
+        final sigResp = await apiClient.dio.post(
+          '/uploads/cloudinary/signature',
+          data: {'uploadContext': 'AVATAR'},
+        );
         sig = CloudinarySignatureResponse.fromJson(sigResp.data);
       } on DioException catch (e) {
-        throw Exception('Step 1 (signature) failed ${e.response?.statusCode}: ${e.response?.data}');
+        throw Exception(
+          'Step 1 (signature) failed ${e.response?.statusCode}: ${e.response?.data}',
+        );
+      }
+
+      final signedPublicId =
+          (sig.params['public_id'] ?? sig.params['publicId'] ?? '').trim();
+      if (signedPublicId.isEmpty) {
+        throw Exception(
+          'Step 1 (signature) failed: missing signed public_id target',
+        );
       }
 
       // Step 2: upload directly to Cloudinary
       late String secureUrl;
       try {
-        final formData = FormData.fromMap({
-          'file': await MultipartFile.fromFile(image.path, filename: image.name),
+        final formPayload = <String, dynamic>{
+          ...sig.params,
           'api_key': sig.apiKey,
           'timestamp': sig.timestamp.toString(),
           'signature': sig.signature,
-          ...sig.params,
-        });
+          'file': await MultipartFile.fromFile(
+            image.path,
+            filename: image.name,
+          ),
+        };
+
+        final formData = FormData.fromMap(formPayload);
         final cloudinaryUrl =
             'https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload';
         final cloudResp = await Dio().post(cloudinaryUrl, data: formData);
-        secureUrl = (cloudResp.data as Map<String, dynamic>)['secure_url'] as String;
+        final cloudData = Map<String, dynamic>.from(cloudResp.data as Map);
+        secureUrl = cloudData['secure_url']?.toString() ?? '';
+        final uploadedPublicId =
+            cloudData['public_id']?.toString().trim() ?? '';
+        if (secureUrl.isEmpty) {
+          throw Exception('Missing secure_url from Cloudinary response');
+        }
+        final matchesSignedTarget =
+            uploadedPublicId.isEmpty ||
+            uploadedPublicId == signedPublicId ||
+            uploadedPublicId.endsWith('/$signedPublicId');
+        if (!matchesSignedTarget) {
+          throw Exception(
+            'Cloudinary upload target mismatch. expected=$signedPublicId actual=$uploadedPublicId',
+          );
+        }
       } on DioException catch (e) {
-        throw Exception('Step 2 (Cloudinary upload) failed ${e.response?.statusCode}: ${e.response?.data}');
+        throw Exception(
+          'Step 2 (Cloudinary upload) failed ${e.response?.statusCode}: ${e.response?.data}',
+        );
       }
 
-      // Step 3: persist the URL on the user's profile
+      // Step 3: confirm avatar metadata with backend validation.
       try {
-        await apiClient.dio.put('/users/profile', data: {'avatarUrl': secureUrl});
+        final confirmResp = await apiClient.dio.put(
+          '/users/profile/avatar',
+          data: {'avatarUrl': secureUrl, 'avatarPublicId': signedPublicId},
+        );
+        if (mounted) {
+          setState(() {
+            _profile = UserProfile.fromJson(confirmResp.data);
+          });
+        }
       } on DioException catch (e) {
-        throw Exception('Step 3 (save to profile) failed ${e.response?.statusCode}: ${e.response?.data}');
+        throw Exception(
+          'Step 3 (avatar confirmation) failed ${e.response?.statusCode}: ${e.response?.data}',
+        );
       }
 
-      // Step 4: reload profile so the URL is live
-      await _loadProfile();
-      if (mounted) setState(() => _profileImage = null);
+      if (mounted) {
+        setState(() => _profileImage = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,18 +190,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
       backgroundColor: AppColors.lightGray,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: AppColors.darkGray,
-          ),
+          icon: const Icon(Icons.arrow_back, color: AppColors.darkGray),
           onPressed: () {
             Navigator.pop(context);
           },
@@ -164,9 +218,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -197,36 +249,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.lightGray,
-                        width: 3,
-                      ),
+                      border: Border.all(color: AppColors.lightGray, width: 3),
                     ),
                     child: CircleAvatar(
                       radius: 58,
                       backgroundColor: AppColors.darkGray,
                       backgroundImage: _profileImage != null
-                          ? FileImage(File(_profileImage!.path)) as ImageProvider
+                          ? FileImage(File(_profileImage!.path))
+                                as ImageProvider
                           : (_profile?.avatarUrl != null
-                              ? NetworkImage(_profile!.avatarUrl!) as ImageProvider
-                              : null),
+                                ? NetworkImage(_profile!.avatarUrl!)
+                                      as ImageProvider
+                                : null),
                       child: _isUploadingAvatar
                           ? const CircularProgressIndicator(
                               color: AppColors.white,
                               strokeWidth: 3,
                             )
-                          : (_profileImage == null && _profile?.avatarUrl == null
-                              ? Text(
-                                  (_profile?.fullName.isNotEmpty == true)
-                                      ? _profile!.fullName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    color: AppColors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 40,
-                                  ),
-                                )
-                              : null),
+                          : (_profileImage == null &&
+                                    _profile?.avatarUrl == null
+                                ? Text(
+                                    (_profile?.fullName.isNotEmpty == true)
+                                        ? _profile!.fullName[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      color: AppColors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 40,
+                                    ),
+                                  )
+                                : null),
                     ),
                   ),
                   Positioned(
@@ -269,10 +321,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Student Member',
-                    style: TextStyle(
-                      color: AppColors.mediumGray,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: AppColors.mediumGray, fontSize: 16),
                   ),
                 ],
               ),
@@ -302,7 +351,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
@@ -349,7 +398,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
@@ -430,26 +479,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           child: Row(
             children: [
-              Icon(
-                prefixIcon,
-                color: AppColors.mediumGray,
-                size: 20,
-              ),
+              Icon(prefixIcon, color: AppColors.mediumGray, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   value,
-                  style: TextStyle(
-                    color: AppColors.darkGray,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: AppColors.darkGray, fontSize: 15),
                 ),
               ),
-              Icon(
-                Icons.lock,
-                color: AppColors.mediumGray,
-                size: 18,
-              ),
+              Icon(Icons.lock, color: AppColors.mediumGray, size: 18),
             ],
           ),
         ),

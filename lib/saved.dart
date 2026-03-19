@@ -17,6 +17,7 @@ class SavedScreen extends StatefulWidget {
 class _SavedScreenState extends State<SavedScreen> with RouteAware {
   List<BookmarkCardResponse> _savedItems = [];
   Map<int, String> _ownerNames = {};
+  Map<int, String?> _ownerAvatars = {};
   Map<int, int> _listingOwnerIds = {};
   Map<int, ListingResponse> _listingDetails = {};
   Map<int, ListingCardResponse> _listingCards = {};
@@ -52,7 +53,10 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
   Future<void> _loadBookmarks() async {
     setState(() => _isLoading = true);
     try {
-      final resp = await apiClient.dio.get('/bookmarks', queryParameters: {'page': 0, 'size': 50});
+      final resp = await apiClient.dio.get(
+        '/bookmarks',
+        queryParameters: {'page': 0, 'size': 50},
+      );
       final items = (resp.data['items'] as List)
           .map((e) => BookmarkCardResponse.fromJson(e))
           .toList();
@@ -60,6 +64,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         setState(() {
           _savedItems = items;
           _ownerNames = {};
+          _ownerAvatars = {};
           _listingOwnerIds = {};
           _listingDetails = {};
           _listingCards = {};
@@ -120,7 +125,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
     final listingOwnerIds = <int, int>{};
 
     for (final item in items) {
-      final ownerId = listingCards[item.id]?.ownerUserId ??
+      final ownerId =
+          listingCards[item.id]?.ownerUserId ??
           listingDetails[item.id]?.ownerUserId ??
           item.ownerUserId;
       if (ownerId != null) {
@@ -134,7 +140,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         try {
           final resp = await apiClient.dio.get('/users/$id/public');
           final profile = PublicUserProfile.fromJson(resp.data);
-          return MapEntry(id, profile.fullName);
+          return MapEntry(id, profile);
         } catch (_) {
           return null;
         }
@@ -148,7 +154,14 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         _listingOwnerIds = listingOwnerIds;
         _ownerNames = {
           for (final e in results)
-            if (e != null) e.key: e.value,
+            if (e != null) e.key: e.value.fullName,
+        };
+        _ownerAvatars = {
+          for (final e in results)
+            if (e != null)
+              e.key: (e.value.avatarUrl?.trim().isNotEmpty == true)
+                  ? e.value.avatarUrl
+                  : null,
         };
       });
     }
@@ -163,7 +176,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
   }
 
   String _resolvedSellerName(BookmarkCardResponse item) {
-    final ownerId = _resolvedListingCard(item)?.ownerUserId ??
+    final ownerId =
+        _resolvedListingCard(item)?.ownerUserId ??
         _resolvedListing(item)?.ownerUserId ??
         item.ownerUserId ??
         _listingOwnerIds[item.id];
@@ -187,12 +201,19 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
 
   String _resolvedLocation(BookmarkCardResponse item) {
     final listing = _resolvedListing(item);
-    return listing?.locationText ?? item.locationText ?? listing?.campus ?? item.campus ?? '';
+    return listing?.locationText ??
+        item.locationText ??
+        listing?.campus ??
+        item.campus ??
+        '';
   }
 
   Future<void> _removeItem(int listingId) async {
     try {
-      await apiClient.dio.delete('/bookmarks', queryParameters: {'listingId': listingId});
+      await apiClient.dio.delete(
+        '/bookmarks',
+        queryParameters: {'listingId': listingId},
+      );
       if (mounted) {
         setState(() => _savedItems.removeWhere((item) => item.id == listingId));
       }
@@ -201,16 +222,30 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
 
   Future<void> _startChat(BookmarkCardResponse item) async {
     try {
-      final resp = await apiClient.dio.post('/conversations', data: {'listingId': item.id});
+      final resp = await apiClient.dio.post(
+        '/conversations',
+        data: {'listingId': item.id},
+      );
       final conv = ConversationResponse.fromJson(resp.data);
       String sellerName = _displaySellerName(item);
       String? sellerPhone;
+      String? sellerAvatar;
       try {
-        final pResp = await apiClient.dio.get('/users/${conv.posterUserId}/public');
+        final pResp = await apiClient.dio.get(
+          '/users/${conv.posterUserId}/public',
+        );
         final profile = PublicUserProfile.fromJson(pResp.data);
         sellerName = profile.fullName;
         sellerPhone = profile.phoneNumber;
+        final avatarUrl = profile.avatarUrl?.trim();
+        sellerAvatar = (avatarUrl != null && avatarUrl.isNotEmpty)
+            ? avatarUrl
+            : null;
       } catch (_) {}
+
+      sellerAvatar ??=
+          _ownerAvatars[_resolvedOwnerUserId(item) ?? conv.posterUserId];
+
       if (!mounted) return;
       Navigator.push(
         context,
@@ -218,6 +253,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           builder: (context) => InboxScreen(
             conversationId: conv.id,
             userName: sellerName,
+            avatarUrl: sellerAvatar,
             isOnline: false,
             phoneNumber: sellerPhone,
             counterpartUserId: _resolvedOwnerUserId(item) ?? conv.posterUserId,
@@ -240,11 +276,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -377,6 +409,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
               imageUrl: item.primaryImageUrl,
               vendorName: _displaySellerName(item),
               vendorLocation: _resolvedLocation(item),
+              vendorAvatar: _ownerAvatars[_resolvedOwnerUserId(item)],
+              ownerUserIdHint: _resolvedOwnerUserId(item),
               initiallyBookmarked: true,
             ),
           ),
@@ -388,220 +422,215 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           color: AppColors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top row: Thumbnail and Info
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Thumbnail
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: item.primaryImageUrl != null
-                    ? Image.network(
-                        item.primaryImageUrl!,
-                        width: 100,
-                        height: 100,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 100,
-                        height: 100,
-                        color: AppColors.lightGray,
-                        child: const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: AppColors.mediumGray,
-                          size: 36,
-                        ),
-                      ),
-                ),
-                const SizedBox(width: 12),
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _displaySellerName(item),
-                        style: const TextStyle(
-                          color: AppColors.darkGray,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      // Title
-                      Text(
-                        item.title,
-                        style: const TextStyle(
-                          color: AppColors.darkGray,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      // Price
-                      Text(
-                        'UGX ${item.priceUgx.toString().replaceAllMapped(
-                              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                              (Match m) => '${m[1]},',
-                            )}',
-                        style: const TextStyle(
-                          color: AppColors.teal,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      // Location
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 14,
-                            color: AppColors.mediumGray,
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              _resolvedLocation(item),
-                              style: const TextStyle(
-                                color: AppColors.mediumGray,
-                                fontSize: 12,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Action Row - Full Width
-            Row(
-              children: [
-                // Remove Button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _removeItem(item.id),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.mediumGray,
-                      side: BorderSide(
-                        color: AppColors.lightGray,
-                        width: 1,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: Icon(
-                      Icons.delete_outline,
-                      size: 16,
-                      color: AppColors.mediumGray,
-                    ),
-                    label: Text(
-                      'Remove',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Status Badge
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isAvailable
-                          ? Colors.green.shade50
-                          : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Center(
-                      child: Text(
-                        isAvailable ? 'Available' : 'Sold',
-                        style: TextStyle(
-                          color: isAvailable
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Chat Now Button
-                if (_myUserId == null || _resolvedOwnerUserId(item) != _myUserId)
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: isAvailable ? () => _startChat(item) : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isAvailable
-                          ? AppColors.teal
-                          : AppColors.lightGray,
-                      foregroundColor: isAvailable
-                          ? AppColors.white
-                          : AppColors.mediumGray,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 0,
-                    ),
-                    icon: Icon(
-                      Icons.chat_bubble_outline,
-                      size: 16,
-                      color: isAvailable
-                          ? AppColors.white
-                          : AppColors.mediumGray,
-                    ),
-                    label: Text(
-                      'Chat Now',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: Thumbnail and Info
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Thumbnail
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: item.primaryImageUrl != null
+                        ? Image.network(
+                            item.primaryImageUrl!,
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            width: 100,
+                            height: 100,
+                            color: AppColors.lightGray,
+                            child: const Icon(
+                              Icons.image_not_supported_outlined,
+                              color: AppColors.mediumGray,
+                              size: 36,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _displaySellerName(item),
+                          style: const TextStyle(
+                            color: AppColors.darkGray,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Title
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: AppColors.darkGray,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        // Price
+                        Text(
+                          'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+                          style: const TextStyle(
+                            color: AppColors.teal,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Location
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              size: 14,
+                              color: AppColors.mediumGray,
+                            ),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                _resolvedLocation(item),
+                                style: const TextStyle(
+                                  color: AppColors.mediumGray,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Action Row - Full Width
+              Row(
+                children: [
+                  // Remove Button
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _removeItem(item.id),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.mediumGray,
+                        side: BorderSide(color: AppColors.lightGray, width: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 16,
+                        color: AppColors.mediumGray,
+                      ),
+                      label: Text(
+                        'Remove',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Status Badge
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isAvailable
+                            ? Colors.green.shade50
+                            : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text(
+                          isAvailable ? 'Available' : 'Sold',
+                          style: TextStyle(
+                            color: isAvailable
+                                ? Colors.green.shade700
+                                : Colors.red.shade700,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Chat Now Button
+                  if (_myUserId == null ||
+                      _resolvedOwnerUserId(item) != _myUserId)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: isAvailable ? () => _startChat(item) : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isAvailable
+                              ? AppColors.teal
+                              : AppColors.lightGray,
+                          foregroundColor: isAvailable
+                              ? AppColors.white
+                              : AppColors.mediumGray,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 0,
+                        ),
+                        icon: Icon(
+                          Icons.chat_bubble_outline,
+                          size: 16,
+                          color: isAvailable
+                              ? AppColors.white
+                              : AppColors.mediumGray,
+                        ),
+                        label: Text(
+                          'Chat Now',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
     );
   }
 }

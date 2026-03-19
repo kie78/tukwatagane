@@ -83,18 +83,23 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     var total = pageSize;
 
     while (pageIndex * pageSize < total) {
-      final resp = await apiClient.dio.get('/listings/feed', queryParameters: {
-        'lat': origin.latitude,
-        'lng': origin.longitude,
-        'page': pageIndex,
-        'size': pageSize,
-      });
+      final resp = await apiClient.dio.get(
+        '/listings/feed',
+        queryParameters: {
+          'lat': origin.latitude,
+          'lng': origin.longitude,
+          'page': pageIndex,
+          'size': pageSize,
+        },
+      );
       final page = ListingPage.fromJson(resp.data);
       total = page.total;
 
       matches.addAll(
         page.items.where(
-          (item) => widget.categoryCode == null || item.categoryCode == widget.categoryCode,
+          (item) =>
+              widget.categoryCode == null ||
+              item.categoryCode == widget.categoryCode,
         ),
       );
 
@@ -115,7 +120,8 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
   /// Groups listings by campus zone. Uses locationText (the zone name saved
   /// at post time) as primary key, falling back to coordinate-based lookup.
   Map<String, List<ListingCardResponse>> _groupIntoZones(
-      List<ListingCardResponse> listings) {
+    List<ListingCardResponse> listings,
+  ) {
     final map = <String, List<ListingCardResponse>>{};
     for (final item in listings) {
       String? tag;
@@ -143,8 +149,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     for (final entry in zoneMap.entries) {
       final tag = entry.key;
       final items = entry.value;
-      final zone = campusZones.firstWhere((z) => z.tag == tag,
-          orElse: () => campusZones.first);
+      final zone = campusZones.firstWhere(
+        (z) => z.tag == tag,
+        orElse: () => campusZones.first,
+      );
       final centroid = LatLng(
         zone.points.map((p) => p.latitude).reduce((a, b) => a + b) /
             zone.points.length,
@@ -152,14 +160,16 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
             zone.points.length,
       );
       final icon = await _buildListingPinBitmap(items.length, px);
-      markers.add(Marker(
-        markerId: MarkerId('zone_pin_$tag'),
-        position: centroid,
-        icon: icon,
-        zIndex: 2.0,
-        anchor: const Offset(0.5, 1.0),
-        onTap: () => _focusZone(tag),
-      ));
+      markers.add(
+        Marker(
+          markerId: MarkerId('zone_pin_$tag'),
+          position: centroid,
+          icon: icon,
+          zIndex: 2.0,
+          anchor: const Offset(0.5, 1.0),
+          onTap: () => _focusZone(tag),
+        ),
+      );
     }
     markers.addAll(await buildZoneLabelMarkers(px));
     if (mounted) setState(() => _zonePinMarkers = markers);
@@ -169,8 +179,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
   void _fitCameraToZones() {
     if (_mapController == null || _zoneListings.isEmpty) return;
     final centroids = _zoneListings.keys.map((tag) {
-      final zone = campusZones.firstWhere((z) => z.tag == tag,
-          orElse: () => campusZones.first);
+      final zone = campusZones.firstWhere(
+        (z) => z.tag == tag,
+        orElse: () => campusZones.first,
+      );
       return LatLng(
         zone.points.map((p) => p.latitude).reduce((a, b) => a + b) /
             zone.points.length,
@@ -181,7 +193,8 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     if (centroids.isEmpty) return;
     if (centroids.length == 1) {
       _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(centroids.first, 16.0));
+        CameraUpdate.newLatLngZoom(centroids.first, 16.0),
+      );
       return;
     }
     final bounds = centroids.fold<LatLngBounds?>(
@@ -207,12 +220,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
               ),
             ),
     )!;
-    _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 80));
+    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
-  Future<BitmapDescriptor> _buildListingPinBitmap(
-      int count, double px) async {
+  Future<BitmapDescriptor> _buildListingPinBitmap(int count, double px) async {
     final w = 44.0 * px;
     final bodyH = 44.0 * px;
     final stemH = 12.0 * px;
@@ -273,7 +284,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
       final badgeX = w - badgeR - 1.5 * px;
       final badgeY = badgeR + 1.5 * px;
       canvas.drawCircle(
-          Offset(badgeX, badgeY), badgeR, Paint()..color = Colors.white);
+        Offset(badgeX, badgeY),
+        badgeR,
+        Paint()..color = Colors.white,
+      );
       final countPainter = TextPainter(
         text: TextSpan(
           text: count > 9 ? '9+' : count.toString(),
@@ -288,8 +302,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
       countPainter.layout();
       countPainter.paint(
         canvas,
-        Offset(badgeX - countPainter.width / 2,
-            badgeY - countPainter.height / 2),
+        Offset(
+          badgeX - countPainter.width / 2,
+          badgeY - countPainter.height / 2,
+        ),
       );
     }
 
@@ -307,10 +323,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
         leading: IconButton(
           icon: CircleAvatar(
             backgroundColor: AppColors.lightGray,
-            child: Icon(
-              Icons.arrow_back,
-              color: AppColors.darkGray,
-            ),
+            child: Icon(Icons.arrow_back, color: AppColors.darkGray),
           ),
           onPressed: () {
             Navigator.pushReplacementNamed(context, '/search');
@@ -334,9 +347,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -345,108 +356,133 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _listings.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.inbox_outlined, size: 64, color: AppColors.mediumGray),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No listings in ${widget.categoryName}',
-                        style: const TextStyle(color: AppColors.mediumGray),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.inbox_outlined,
+                    size: 64,
+                    color: AppColors.mediumGray,
                   ),
-                )
-              : _showMap ? _buildMapView() : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _listings.length,
-                    itemBuilder: (context, index) {
-                      final item = _listings[index];
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProductDetailsScreen(
-                                listingId: item.id,
-                                productTitle: item.title,
-                                productDescription: item.description ?? '',
-                                price: item.priceUgx,
-                                imageUrl: item.primaryImageUrl,
-                                vendorName: item.ownerFullName ?? '',
-                                vendorLocation: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
-                                ownerUserIdHint: item.ownerUserId,
-                              ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No listings in ${widget.categoryName}',
+                    style: const TextStyle(color: AppColors.mediumGray),
+                  ),
+                ],
+              ),
+            )
+          : _showMap
+          ? _buildMapView()
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _listings.length,
+                itemBuilder: (context, index) {
+                  final item = _listings[index];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProductDetailsScreen(
+                            listingId: item.id,
+                            productTitle: item.title,
+                            productDescription: item.description ?? '',
+                            price: item.priceUgx,
+                            imageUrl: item.primaryImageUrl,
+                            vendorName: item.ownerFullName ?? '',
+                            vendorLocation: zoneLabel(
+                              item.lat,
+                              item.lng,
+                              fallback: item.locationText ?? '',
                             ),
-                          );
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: item.primaryImageUrl != null
-                                  ? Image.network(
-                                      item.primaryImageUrl!,
-                                      width: 80,
-                                      height: 80,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(
-                                      width: 80,
-                                      height: 80,
-                                      color: AppColors.lightGray,
-                                      child: const Icon(
-                                        Icons.image_not_supported_outlined,
-                                        color: AppColors.mediumGray,
-                                        size: 28,
-                                      ),
-                                    ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item.title,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.darkGray)),
-                                    const SizedBox(height: 4),
-                                    Text('UGX ${item.priceUgx}',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.darkGray)),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.mediumGray),
-                                    ),
-                                    Text(_timeAgo(item.createdAt),
-                                        style: const TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.mediumGray)),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            vendorAvatar: item.ownerAvatarUrl,
+                            ownerUserIdHint: item.ownerUserId,
                           ),
                         ),
                       );
                     },
-                  ),
-                ),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: item.primaryImageUrl != null
+                                ? Image.network(
+                                    item.primaryImageUrl!,
+                                    width: 80,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Container(
+                                    width: 80,
+                                    height: 80,
+                                    color: AppColors.lightGray,
+                                    child: const Icon(
+                                      Icons.image_not_supported_outlined,
+                                      color: AppColors.mediumGray,
+                                      size: 28,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkGray,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'UGX ${item.priceUgx}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkGray,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  zoneLabel(
+                                    item.lat,
+                                    item.lng,
+                                    fallback: item.locationText ?? '',
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.mediumGray,
+                                  ),
+                                ),
+                                Text(
+                                  _timeAgo(item.createdAt),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.mediumGray,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
       floatingActionButton: !_isLoading && _listings.isNotEmpty
           ? _buildTogglePill()
           : null,
@@ -526,7 +562,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
             child: GestureDetector(
               onTap: _showZoneSummaryModal,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(20),
@@ -565,7 +604,9 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
   }
 
   List<MapEntry<String, List<ListingCardResponse>>> _sortedZoneListings() {
-    final entries = _zoneListings.entries.where((entry) => entry.value.isNotEmpty).toList();
+    final entries = _zoneListings.entries
+        .where((entry) => entry.value.isNotEmpty)
+        .toList();
     entries.sort((a, b) {
       final countCompare = b.value.length.compareTo(a.value.length);
       if (countCompare != 0) return countCompare;
@@ -615,10 +656,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     if (_mapController == null) return;
 
     final bounds = _zoneBounds(tag);
-    final latSpan =
-        (bounds.northeast.latitude - bounds.southwest.latitude).abs();
-    final lngSpan =
-        (bounds.northeast.longitude - bounds.southwest.longitude).abs();
+    final latSpan = (bounds.northeast.latitude - bounds.southwest.latitude)
+        .abs();
+    final lngSpan = (bounds.northeast.longitude - bounds.southwest.longitude)
+        .abs();
 
     if (latSpan < 0.0003 && lngSpan < 0.0003) {
       final center = LatLng(
@@ -696,7 +737,9 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                                 onTap: () => Navigator.of(dialogContext).pop(),
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: AppColors.white.withValues(alpha: 0.56),
+                                    color: AppColors.white.withValues(
+                                      alpha: 0.56,
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   padding: const EdgeInsets.all(6),
@@ -711,14 +754,17 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                           ),
                           const SizedBox(height: 12),
                           ConstrainedBox(
-                            constraints: BoxConstraints(maxHeight: rowHeight * visibleRows),
+                            constraints: BoxConstraints(
+                              maxHeight: rowHeight * visibleRows,
+                            ),
                             child: ListView.separated(
                               shrinkWrap: true,
                               physics: zoneEntries.length > 4
                                   ? const ClampingScrollPhysics()
                                   : const NeverScrollableScrollPhysics(),
                               itemCount: zoneEntries.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final entry = zoneEntries[index];
                                 final listingCount = entry.value.length;
@@ -726,11 +772,12 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () {
                                     Navigator.of(dialogContext).pop();
-                                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                                      if (mounted) {
-                                        _focusZone(entry.key);
-                                      }
-                                    });
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (mounted) {
+                                            _focusZone(entry.key);
+                                          }
+                                        });
                                   },
                                   child: SizedBox(
                                     height: rowHeight,
@@ -768,7 +815,9 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          listingCount == 1 ? 'listing' : 'listings',
+                                          listingCount == 1
+                                              ? 'listing'
+                                              : 'listings',
                                           style: const TextStyle(
                                             fontSize: 12,
                                             color: AppColors.mediumGray,
@@ -810,7 +859,12 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
               price: item.priceUgx,
               imageUrl: item.primaryImageUrl,
               vendorName: item.ownerFullName ?? '',
-              vendorLocation: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
+              vendorLocation: zoneLabel(
+                item.lat,
+                item.lng,
+                fallback: item.locationText ?? '',
+              ),
+              vendorAvatar: item.ownerAvatarUrl,
               ownerUserIdHint: item.ownerUserId,
             ),
           ),
@@ -835,12 +889,20 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: item.primaryImageUrl != null
-                  ? Image.network(item.primaryImageUrl!, width: 88, height: 88, fit: BoxFit.cover)
+                  ? Image.network(
+                      item.primaryImageUrl!,
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                    )
                   : Container(
                       width: 88,
                       height: 88,
                       color: AppColors.lightGray,
-                      child: const Icon(Icons.image_not_supported_outlined, color: AppColors.mediumGray),
+                      child: const Icon(
+                        Icons.image_not_supported_outlined,
+                        color: AppColors.mediumGray,
+                      ),
                     ),
             ),
             const SizedBox(width: 12),
@@ -881,10 +943,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            'UGX ${item.priceUgx.toString().replaceAllMapped(
-                                  RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                                  (Match m) => '${m[1]},',
-                                )}',
+                            'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                             style: const TextStyle(
                               color: AppColors.darkGray,
                               fontWeight: FontWeight.bold,
@@ -902,7 +961,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right, color: AppColors.mediumGray),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.mediumGray,
+                        ),
                       ],
                     ),
                   ],
@@ -919,8 +981,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     final items = _zoneListings[_selectedZoneTag!] ?? [];
     if (items.isEmpty) return const SizedBox.shrink();
     final zoneName = campusZones
-        .firstWhere((z) => z.tag == _selectedZoneTag!,
-            orElse: () => campusZones.first)
+        .firstWhere(
+          (z) => z.tag == _selectedZoneTag!,
+          orElse: () => campusZones.first,
+        )
         .name;
     return Positioned(
       bottom: 80,
@@ -933,8 +997,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.darkGray,
                   borderRadius: BorderRadius.circular(12),
@@ -942,9 +1008,10 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                 child: Text(
                   '$zoneName · ${items.length} listing${items.length == 1 ? '' : 's'}',
                   style: const TextStyle(
-                      color: AppColors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600),
+                    color: AppColors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const Spacer(),
@@ -956,8 +1023,11 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
                     shape: BoxShape.circle,
                   ),
                   padding: const EdgeInsets.all(5),
-                  child: const Icon(Icons.close,
-                      color: AppColors.white, size: 15),
+                  child: const Icon(
+                    Icons.close,
+                    color: AppColors.white,
+                    size: 15,
+                  ),
                 ),
               ),
             ],

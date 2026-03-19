@@ -4,6 +4,7 @@ import 'inbox.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
+import 'core/avatar_resolver.dart';
 import 'models/models.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with RouteAware {
   List<_ConversationGroup> _groups = [];
+  Map<int, String?> _counterpartAvatars = {};
   bool _isLoading = true;
 
   @override
@@ -49,45 +51,58 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   Future<void> _loadConversations() async {
     setState(() => _isLoading = true);
     try {
-      final resp = await apiClient.dio.get('/conversations', queryParameters: {'page': 0, 'size': 50});
+      final resp = await apiClient.dio.get(
+        '/conversations',
+        queryParameters: {'page': 0, 'size': 50},
+      );
       final items = (resp.data['items'] as List)
           .map((e) => ConversationListItem.fromJson(e))
           .toList();
+      final avatarMap = await avatarResolver.resolveAvatarUrls(
+        items.map((item) => item.counterpartUserId),
+      );
       if (mounted) {
-        setState(() => _groups = _groupConversations(items));
+        setState(() {
+          _groups = _groupConversations(items);
+          _counterpartAvatars = avatarMap;
+        });
         unreadNotifier.value = items.fold(0, (sum, c) => sum + c.unreadCount);
       }
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
   }
 
-  List<_ConversationGroup> _groupConversations(List<ConversationListItem> items) {
+  List<_ConversationGroup> _groupConversations(
+    List<ConversationListItem> items,
+  ) {
     final map = <int, List<ConversationListItem>>{};
     for (final c in items) {
       map.putIfAbsent(c.counterpartUserId, () => []).add(c);
     }
-    final groups = map.entries.map((e) {
-      final convs = List<ConversationListItem>.from(e.value)
-        ..sort((a, b) {
-          if (a.lastMessageAt == null) return 1;
-          if (b.lastMessageAt == null) return -1;
-          return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+    final groups =
+        map.entries.map((e) {
+          final convs = List<ConversationListItem>.from(e.value)
+            ..sort((a, b) {
+              if (a.lastMessageAt == null) return 1;
+              if (b.lastMessageAt == null) return -1;
+              return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+            });
+          return _ConversationGroup(
+            counterpartUserId: e.key,
+            counterpartFullName: convs.first.counterpartFullName,
+            counterpartPhoneNumber: convs.first.counterpartPhoneNumber,
+            counterpartActiveNow: convs.any((c) => c.counterpartActiveNow),
+            totalUnread: convs.fold(0, (sum, c) => sum + c.unreadCount),
+            mostRecent: convs.first,
+            conversations: convs,
+          );
+        }).toList()..sort((a, b) {
+          if (a.mostRecent.lastMessageAt == null) return 1;
+          if (b.mostRecent.lastMessageAt == null) return -1;
+          return b.mostRecent.lastMessageAt!.compareTo(
+            a.mostRecent.lastMessageAt!,
+          );
         });
-      return _ConversationGroup(
-        counterpartUserId: e.key,
-        counterpartFullName: convs.first.counterpartFullName,
-        counterpartPhoneNumber: convs.first.counterpartPhoneNumber,
-        counterpartActiveNow: convs.any((c) => c.counterpartActiveNow),
-        totalUnread: convs.fold(0, (sum, c) => sum + c.unreadCount),
-        mostRecent: convs.first,
-        conversations: convs,
-      );
-    }).toList()
-      ..sort((a, b) {
-        if (a.mostRecent.lastMessageAt == null) return 1;
-        if (b.mostRecent.lastMessageAt == null) return -1;
-        return b.mostRecent.lastMessageAt!.compareTo(a.mostRecent.lastMessageAt!);
-      });
     return groups;
   }
 
@@ -100,11 +115,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -124,9 +135,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -152,22 +161,30 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _groups.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No conversations yet',
-                          style: TextStyle(color: AppColors.mediumGray, fontSize: 16),
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadConversations,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _groups.length,
-                          itemBuilder: (context, index) {
-                            return _GroupedChatTile(group: _groups[index]);
-                          },
-                        ),
+                ? const Center(
+                    child: Text(
+                      'No conversations yet',
+                      style: TextStyle(
+                        color: AppColors.mediumGray,
+                        fontSize: 16,
                       ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadConversations,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _groups.length,
+                      itemBuilder: (context, index) {
+                        final group = _groups[index];
+                        return _GroupedChatTile(
+                          group: group,
+                          avatarUrl:
+                              _counterpartAvatars[group.counterpartUserId],
+                        );
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -198,8 +215,9 @@ class _ConversationGroup {
 
 class _GroupedChatTile extends StatelessWidget {
   final _ConversationGroup group;
+  final String? avatarUrl;
 
-  const _GroupedChatTile({required this.group});
+  const _GroupedChatTile({required this.group, this.avatarUrl});
 
   String _timeAgo(DateTime? dt) {
     if (dt == null) return '';
@@ -219,6 +237,7 @@ class _GroupedChatTile extends StatelessWidget {
         builder: (context) => InboxScreen(
           conversationId: conv.id,
           userName: group.counterpartFullName,
+          avatarUrl: avatarUrl,
           isOnline: group.counterpartActiveNow,
           phoneNumber: group.counterpartPhoneNumber,
           initials: initials,
@@ -255,6 +274,9 @@ class _GroupedChatTile extends StatelessWidget {
     final initials = group.counterpartFullName.isNotEmpty
         ? group.counterpartFullName[0].toUpperCase()
         : '?';
+    final resolvedAvatarUrl = (avatarUrl?.trim().isNotEmpty == true)
+        ? avatarUrl
+        : null;
     final hasUnread = group.totalUnread > 0;
     final subtitle = group.conversations.length > 1
         ? '${group.conversations.length} active threads'
@@ -272,18 +294,23 @@ class _GroupedChatTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: AppColors.lightGray,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: AppColors.darkGray,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ),
+            resolvedAvatarUrl != null
+                ? CircleAvatar(
+                    radius: 28,
+                    backgroundImage: NetworkImage(resolvedAvatarUrl),
+                  )
+                : CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppColors.lightGray,
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: AppColors.darkGray,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -300,7 +327,10 @@ class _GroupedChatTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: AppColors.mediumGray, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.mediumGray,
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -309,8 +339,12 @@ class _GroupedChatTile extends StatelessWidget {
                     Text(
                       group.mostRecent.lastMessageBody!,
                       style: TextStyle(
-                        color: hasUnread ? AppColors.darkGray : AppColors.mediumGray,
-                        fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+                        color: hasUnread
+                            ? AppColors.darkGray
+                            : AppColors.mediumGray,
+                        fontWeight: hasUnread
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         fontSize: 13,
                       ),
                       maxLines: 1,
@@ -326,7 +360,10 @@ class _GroupedChatTile extends StatelessWidget {
               children: [
                 Text(
                   _timeAgo(group.mostRecent.lastMessageAt),
-                  style: const TextStyle(color: AppColors.mediumGray, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.mediumGray,
+                    fontSize: 12,
+                  ),
                 ),
                 if (hasUnread) ...[
                   const SizedBox(height: 6),
@@ -389,58 +426,66 @@ class _ThreadPickerSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        ...group.conversations.map((conv) => ListTile(
-              leading: Icon(
-                Icons.chat_bubble_outline,
-                color: conv.unreadCount > 0 ? AppColors.teal : AppColors.mediumGray,
+        ...group.conversations.map(
+          (conv) => ListTile(
+            leading: Icon(
+              Icons.chat_bubble_outline,
+              color: conv.unreadCount > 0
+                  ? AppColors.teal
+                  : AppColors.mediumGray,
+            ),
+            title: Text(
+              conv.listingTitle,
+              style: const TextStyle(
+                color: AppColors.darkGray,
+                fontWeight: FontWeight.w600,
               ),
-              title: Text(
-                conv.listingTitle,
-                style: const TextStyle(
-                    color: AppColors.darkGray, fontWeight: FontWeight.w600),
-              ),
-              subtitle: conv.lastMessageBody != null
-                  ? Text(
-                      conv.lastMessageBody!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.mediumGray),
-                    )
-                  : null,
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _timeAgo(conv.lastMessageAt),
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.mediumGray),
+            ),
+            subtitle: conv.lastMessageBody != null
+                ? Text(
+                    conv.lastMessageBody!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.mediumGray),
+                  )
+                : null,
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _timeAgo(conv.lastMessageAt),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.mediumGray,
                   ),
-                  if (conv.unreadCount > 0) ...[
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        borderRadius:
-                            BorderRadius.all(Radius.circular(10)),
-                      ),
-                      child: Text(
-                        conv.unreadCount > 99
-                            ? '99+'
-                            : '${conv.unreadCount}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold),
+                ),
+                if (conv.unreadCount > 0) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                    ),
+                    child: Text(
+                      conv.unreadCount > 99 ? '99+' : '${conv.unreadCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
-              onTap: () => onSelect(conv),
-            )),
+              ],
+            ),
+            onTap: () => onSelect(conv),
+          ),
+        ),
         const SizedBox(height: 16),
       ],
     );

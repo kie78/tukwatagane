@@ -10,6 +10,7 @@ import 'saved.dart';
 
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
+import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
@@ -23,7 +24,9 @@ class BrowseScreen extends StatefulWidget {
 
 class _BrowseScreenState extends State<BrowseScreen> {
   List<ListingCardResponse> _listings = [];
+  Map<int, String?> _ownerAvatars = {};
   String? _myFullName;
+  String? _myAvatarUrl;
   bool _isLoading = true;
   Set<int> _bookmarkedIds = {};
 
@@ -47,8 +50,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   Future<void> _loadBookmarkedIds() async {
     try {
-      final resp = await apiClient.dio
-          .get('/bookmarks', queryParameters: {'page': 0, 'size': 200});
+      final resp = await apiClient.dio.get(
+        '/bookmarks',
+        queryParameters: {'page': 0, 'size': 200},
+      );
       final ids = (resp.data['items'] as List)
           .map((e) => e['id'] as int)
           .toSet();
@@ -58,8 +63,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   Future<void> _bootstrapUnread() async {
     try {
-      final resp = await apiClient.dio.get('/conversations',
-          queryParameters: {'page': 0, 'size': 50});
+      final resp = await apiClient.dio.get(
+        '/conversations',
+        queryParameters: {'page': 0, 'size': 50},
+      );
       final items = (resp.data['items'] as List)
           .map((e) => ConversationListItem.fromJson(e))
           .toList();
@@ -74,10 +81,13 @@ class _BrowseScreenState extends State<BrowseScreen> {
       // Use registered location from profile (collected at sign-up)
       double lat = -0.5950, lng = 30.5970;
       String? myFullName = _myFullName;
+      String? myAvatarUrl = _myAvatarUrl;
       try {
         final profileResp = await apiClient.dio.get('/users/profile');
         final profile = UserProfile.fromJson(profileResp.data);
         myFullName = profile.fullName;
+        final avatar = profile.avatarUrl?.trim();
+        myAvatarUrl = (avatar != null && avatar.isNotEmpty) ? avatar : null;
         final loc = profile.registeredLocation ?? profile.alternateLocation;
         final regLat = loc?.lat;
         final regLng = loc?.lng;
@@ -87,17 +97,43 @@ class _BrowseScreenState extends State<BrowseScreen> {
         }
       } catch (_) {}
 
-      final resp = await apiClient.dio.get('/listings/feed', queryParameters: {
-        'lat': lat,
-        'lng': lng,
-        'page': 0,
-        'size': 20,
-      });
+      final resp = await apiClient.dio.get(
+        '/listings/feed',
+        queryParameters: {'lat': lat, 'lng': lng, 'page': 0, 'size': 20},
+      );
       final page = ListingPage.fromJson(resp.data);
+
+      final directOwnerAvatars = <int, String?>{};
+      for (final item in page.items) {
+        final ownerId = item.ownerUserId;
+        final avatarUrl = item.ownerAvatarUrl?.trim();
+        if (ownerId == null || avatarUrl == null || avatarUrl.isEmpty) {
+          continue;
+        }
+        directOwnerAvatars[ownerId] = avatarUrl;
+      }
+
+      final ownerIds = page.items
+          .map((item) => item.ownerUserId)
+          .whereType<int>()
+          .toSet();
+      final unresolvedOwnerIds = ownerIds
+          .where((id) => !directOwnerAvatars.containsKey(id))
+          .toSet();
+      final resolvedOwnerAvatars = await avatarResolver.resolveAvatarUrls(
+        unresolvedOwnerIds,
+      );
+      final ownerAvatars = <int, String?>{
+        ...resolvedOwnerAvatars,
+        ...directOwnerAvatars,
+      };
+
       if (mounted) {
         setState(() {
           _listings = page.items;
+          _ownerAvatars = ownerAvatars;
           _myFullName = myFullName;
+          _myAvatarUrl = myAvatarUrl;
         });
       }
     } on DioException catch (_) {
@@ -124,11 +160,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 40,
-              height: 40,
-            ),
+            child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
         title: const Text(
@@ -148,9 +180,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SavedScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SavedScreen()),
               );
             },
           ),
@@ -168,7 +198,21 @@ class _BrowseScreenState extends State<BrowseScreen> {
               child: CircleAvatar(
                 radius: 18,
                 backgroundColor: AppColors.darkGray,
-                child: const Icon(Icons.person_outline, color: AppColors.white, size: 20),
+                backgroundImage: _myAvatarUrl != null
+                    ? NetworkImage(_myAvatarUrl!)
+                    : null,
+                child: _myAvatarUrl == null
+                    ? Text(
+                        (_myFullName?.trim().isNotEmpty == true)
+                            ? _myFullName!.trim()[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: AppColors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      )
+                    : null,
               ),
             ),
           ),
@@ -177,48 +221,59 @@ class _BrowseScreenState extends State<BrowseScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _listings.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.storefront_outlined, size: 64, color: AppColors.mediumGray),
-                      const SizedBox(height: 16),
-                      const Text('No listings yet', style: TextStyle(color: AppColors.mediumGray)),
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: _loadFeed,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Reload'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.storefront_outlined,
+                    size: 64,
+                    color: AppColors.mediumGray,
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadFeed,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    itemCount: _listings.length,
-                    itemBuilder: (context, index) {
-                      final item = _listings[index];
-                      return ProductCard(
-                        listingId: item.id,
-                        productId: item.id.toString(),
-                        sellerName: item.ownerFullName ?? 'Seller',
-                        sellerAvatar: null,
-                        timestamp: _timeAgo(item.createdAt),
-                        productTitle: item.title,
-                        price: item.priceUgx.toString(),
-                        location: zoneLabel(item.lat, item.lng, fallback: item.locationText ?? ''),
-                        imageUrl: item.primaryImageUrl,
-                        isNew: DateTime.now().difference(item.createdAt).inDays < 1,
-                        ownerUserId: item.ownerUserId,
-                        description: item.description,
-                        myFullName: _myFullName,
-                        initiallyBookmarked: _bookmarkedIds.contains(item.id),
-                      );
-                    },
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No listings yet',
+                    style: TextStyle(color: AppColors.mediumGray),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: _loadFeed,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reload'),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadFeed,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                itemCount: _listings.length,
+                itemBuilder: (context, index) {
+                  final item = _listings[index];
+                  return ProductCard(
+                    listingId: item.id,
+                    productId: item.id.toString(),
+                    sellerName: item.ownerFullName ?? 'Seller',
+                    sellerAvatar: _ownerAvatars[item.ownerUserId],
+                    timestamp: _timeAgo(item.createdAt),
+                    productTitle: item.title,
+                    price: item.priceUgx.toString(),
+                    location: zoneLabel(
+                      item.lat,
+                      item.lng,
+                      fallback: item.locationText ?? '',
+                    ),
+                    imageUrl: item.primaryImageUrl,
+                    isNew: DateTime.now().difference(item.createdAt).inDays < 1,
+                    ownerUserId: item.ownerUserId,
+                    description: item.description,
+                    myFullName: _myFullName,
+                    initiallyBookmarked: _bookmarkedIds.contains(item.id),
+                  );
+                },
+              ),
+            ),
       bottomNavigationBar: const MainNavBar(currentIndex: 0),
     );
   }
@@ -287,11 +342,11 @@ class _ProductCardState extends State<ProductCard> {
 
   bool get _isOwnListing =>
       (_myUserId != null &&
-        widget.ownerUserId != null &&
-        _myUserId == widget.ownerUserId) ||
+          widget.ownerUserId != null &&
+          _myUserId == widget.ownerUserId) ||
       ((widget.myFullName ?? '').trim().isNotEmpty &&
-        widget.sellerName.trim().toLowerCase() ==
-          widget.myFullName!.trim().toLowerCase());
+          widget.sellerName.trim().toLowerCase() ==
+              widget.myFullName!.trim().toLowerCase());
 
   void _toggleBookmark() async {
     if (_isBookmarkLoading) return;
@@ -301,15 +356,25 @@ class _ProductCardState extends State<ProductCard> {
     });
     try {
       if (_isBookmarked) {
-        await apiClient.dio.post('/bookmarks', data: {'listingId': widget.listingId});
+        await apiClient.dio.post(
+          '/bookmarks',
+          data: {'listingId': widget.listingId},
+        );
       } else {
-        await apiClient.dio.delete('/bookmarks', queryParameters: {'listingId': widget.listingId});
+        await apiClient.dio.delete(
+          '/bookmarks',
+          queryParameters: {'listingId': widget.listingId},
+        );
       }
       bookmarkUpdateNotifier.value++;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isBookmarked ? 'Added to saved items' : 'Removed from saved items'),
+            content: Text(
+              _isBookmarked
+                  ? 'Added to saved items'
+                  : 'Removed from saved items',
+            ),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -324,7 +389,8 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   void _shareProduct() async {
-    final String shareText = '''
+    final String shareText =
+        '''
 ${widget.productTitle}
 UGX ${widget.price}
 📍 ${widget.location}
@@ -335,10 +401,7 @@ Check out this item on Tukwatagane!
     ''';
 
     try {
-      await Share.share(
-        shareText,
-        subject: widget.productTitle,
-      );
+      await Share.share(shareText, subject: widget.productTitle);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -381,98 +444,114 @@ Check out this item on Tukwatagane!
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
           ],
         ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Seller Header
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => VendorProfileScreen(
-                          vendorName: widget.sellerName,
-                          vendorAvatar: widget.sellerAvatar,
-                          primaryLocation: widget.location,
-                          vendorUserId: widget.ownerUserId,
-                          listingId: widget.listingId,
-                        ),
-                      ),
-                    );
-                  },
-                  child: widget.sellerAvatar != null
-                      ? CircleAvatar(
-                          radius: 20,
-                          backgroundImage: NetworkImage(widget.sellerAvatar!),
-                        )
-                      : CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppColors.darkGray,
-                          child: Text(
-                            widget.sellerName.isNotEmpty
-                                ? widget.sellerName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: AppColors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Seller Header
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VendorProfileScreen(
+                            vendorName: widget.sellerName,
+                            vendorAvatar: widget.sellerAvatar,
+                            primaryLocation: widget.location,
+                            vendorUserId: widget.ownerUserId,
+                            listingId: widget.listingId,
                           ),
                         ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.sellerName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkGray,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        widget.timestamp,
-                        style: const TextStyle(
-                          color: AppColors.mediumGray,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                      );
+                    },
+                    child: widget.sellerAvatar != null
+                        ? CircleAvatar(
+                            radius: 20,
+                            backgroundImage: NetworkImage(widget.sellerAvatar!),
+                          )
+                        : CircleAvatar(
+                            radius: 20,
+                            backgroundColor: AppColors.darkGray,
+                            child: Text(
+                              widget.sellerName.isNotEmpty
+                                  ? widget.sellerName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.sellerName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkGray,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          widget.timestamp,
+                          style: const TextStyle(
+                            color: AppColors.mediumGray,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          // Product Image
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: widget.imageUrl != null
-                      ? Image.network(
-                          widget.imageUrl!,
-                          height: 250,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+            // Product Image
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: widget.imageUrl != null
+                        ? Image.network(
+                            widget.imageUrl!,
                             height: 250,
                             width: double.infinity,
-                            color: AppColors.lightGray,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 250,
+                              width: double.infinity,
+                              color: AppColors.lightGray,
+                              child: const Center(
+                                child: Icon(
+                                  Icons.image_not_supported_outlined,
+                                  color: AppColors.mediumGray,
+                                  size: 64,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            height: 250,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: AppColors.lightGray,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             child: const Center(
                               child: Icon(
                                 Icons.image_not_supported_outlined,
@@ -481,179 +560,179 @@ Check out this item on Tukwatagane!
                               ),
                             ),
                           ),
-                        )
-                      : Container(
-                          height: 250,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: AppColors.lightGray,
-                            borderRadius: BorderRadius.circular(12),
+                  ),
+                  if (widget.isNew)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.darkGray.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'New',
+                          style: TextStyle(
+                            color: AppColors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: AppColors.mediumGray,
-                              size: 64,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Product Details
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.productTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkGray,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'UGX ${widget.price}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.teal,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        color: AppColors.teal,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.location,
+                        style: const TextStyle(
+                          color: AppColors.mediumGray,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Action Buttons
+                  if (!_isOwnListing)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final resp = await apiClient.dio.post(
+                                  '/conversations',
+                                  data: {'listingId': widget.listingId},
+                                );
+                                final conv = ConversationResponse.fromJson(
+                                  resp.data,
+                                );
+                                String? sellerPhone;
+                                try {
+                                  final pResp = await apiClient.dio.get(
+                                    '/users/${conv.posterUserId}/public',
+                                  );
+                                  sellerPhone = PublicUserProfile.fromJson(
+                                    pResp.data,
+                                  ).phoneNumber;
+                                } catch (_) {}
+                                if (!context.mounted) return;
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => InboxScreen(
+                                      conversationId: conv.id,
+                                      userName: widget.sellerName,
+                                      avatarUrl: widget.sellerAvatar,
+                                      isOnline: false,
+                                      phoneNumber: sellerPhone,
+                                      counterpartUserId:
+                                          widget.ownerUserId ??
+                                          conv.posterUserId,
+                                      productTitle: widget.productTitle,
+                                      productImage: widget.imageUrl,
+                                      productPrice: int.parse(
+                                        widget.price.replaceAll(',', ''),
+                                      ),
+                                      productListingId: widget.listingId,
+                                    ),
+                                  ),
+                                );
+                              } catch (_) {}
+                            },
+                            icon: const Icon(
+                              Icons.message,
+                              size: 18,
+                              color: AppColors.white,
+                            ),
+                            label: const Text('Message'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.teal,
+                              foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
                         ),
-                ),
-                if (widget.isNew)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.darkGray.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'New',
-                        style: TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Product Details
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.productTitle,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkGray,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'UGX ${widget.price}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.teal,
-                    fontSize: 20,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      color: AppColors.teal,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.location,
-                      style: const TextStyle(
-                        color: AppColors.mediumGray,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Action Buttons
-                if (!_isOwnListing)
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final resp = await apiClient.dio.post(
-                              '/conversations',
-                              data: {'listingId': widget.listingId},
-                            );
-                            final conv = ConversationResponse.fromJson(resp.data);
-                            String? sellerPhone;
-                            try {
-                              final pResp = await apiClient.dio.get('/users/${conv.posterUserId}/public');
-                              sellerPhone = PublicUserProfile.fromJson(pResp.data).phoneNumber;
-                            } catch (_) {}
-                            if (!context.mounted) return;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => InboxScreen(
-                                  conversationId: conv.id,
-                                  userName: widget.sellerName,
-                                  isOnline: false,
-                                  phoneNumber: sellerPhone,
-                                  productTitle: widget.productTitle,
-                                  productImage: widget.imageUrl,
-                                  productPrice: int.parse(widget.price.replaceAll(',', '')),
-                                  productListingId: widget.listingId,
-                                ),
-                              ),
-                            );
-                          } catch (_) {}
-                        },
-                        icon: const Icon(
-                          Icons.message,
-                          size: 18,
-                          color: AppColors.white,
-                        ),
-                        label: const Text('Message'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.teal,
-                          foregroundColor: AppColors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.lightGray,
                             borderRadius: BorderRadius.circular(10),
                           ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.share,
+                              color: AppColors.darkGray,
+                            ),
+                            onPressed: _shareProduct,
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.lightGray,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.share,
-                          color: AppColors.darkGray,
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.lightGray,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: IconButton(
+                            icon: Icon(
+                              _isBookmarked
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_border,
+                              color: _isBookmarked
+                                  ? Colors.black
+                                  : AppColors.darkGray,
+                            ),
+                            onPressed: _toggleBookmark,
+                          ),
                         ),
-                        onPressed: _shareProduct,
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.lightGray,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                          color: _isBookmarked ? Colors.black : AppColors.darkGray,
-                        ),
-                        onPressed: _toggleBookmark,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
