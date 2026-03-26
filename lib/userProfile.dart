@@ -6,6 +6,7 @@ import 'main.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -47,13 +48,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     try {
       if (_profile == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Could not load profile. Please refresh and try again.',
-              ),
-              backgroundColor: Colors.red,
-            ),
+          AppToast.error(
+            context,
+            'Could not load profile. Please refresh and try again.',
           );
         }
         return;
@@ -154,22 +151,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
       if (mounted) {
         setState(() => _profileImage = null);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile picture updated successfully.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppToast.success(context, 'Profile picture updated successfully.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 8),
-          ),
-        );
+        AppToast.error(context, '$e');
       }
     } finally {
       if (mounted) setState(() => _isUploadingAvatar = false);

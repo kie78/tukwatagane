@@ -5,6 +5,8 @@ import 'inbox.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/public_profile_cache.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 
 class SavedScreen extends StatefulWidget {
@@ -73,43 +75,46 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       await _hydrateSavedListings(items);
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
+    publicProfileCache.logDebugStats('SavedScreen._loadBookmarks');
   }
 
   Future<void> _hydrateSavedListings(List<BookmarkCardResponse> items) async {
-    final listingCardResults = await Future.wait(
-      items.map((item) async {
-        try {
-          final resp = await apiClient.dio.get(
-            '/listings/search',
-            queryParameters: {'query': item.title, 'page': 0, 'size': 20},
-          );
-          final page = ListingPage.fromJson(resp.data);
-          ListingCardResponse? match;
-          for (final listing in page.items) {
-            if (listing.id == item.id) {
-              match = listing;
-              break;
-            }
-          }
-          if (match == null) return null;
-          return MapEntry(item.id, match);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
+    final listingOwnerIds = <int, int>{};
+    final ownerNames = <int, String>{};
+    final ownerAvatars = <int, String?>{};
 
-    final listingCards = {
-      for (final entry in listingCardResults)
-        if (entry != null) entry.key: entry.value,
-    };
+    for (final item in items) {
+      final ownerId = item.ownerUserId;
+      if (ownerId == null) continue;
+
+      listingOwnerIds[item.id] = ownerId;
+
+      final ownerName = item.ownerFullName?.trim();
+      if (ownerName != null && ownerName.isNotEmpty) {
+        ownerNames[ownerId] = ownerName;
+      }
+
+      final ownerAvatar = item.ownerAvatarUrl?.trim();
+      if (ownerAvatar != null && ownerAvatar.isNotEmpty) {
+        ownerAvatars[ownerId] = ownerAvatar;
+      }
+    }
+
+    final listingIdsNeedingLookup = items
+        .where(
+          (item) =>
+              item.ownerUserId == null ||
+              ((item.locationText?.trim().isEmpty ?? true) &&
+                  (item.campus?.trim().isEmpty ?? true)),
+        )
+        .map((item) => item.id)
+        .toList();
 
     final listingResults = await Future.wait(
-      items.map((item) async {
-        if (listingCards.containsKey(item.id)) return null;
+      listingIdsNeedingLookup.map((listingId) async {
         try {
-          final resp = await apiClient.dio.get('/listings/${item.id}');
-          return MapEntry(item.id, ListingResponse.fromJson(resp.data));
+          final resp = await apiClient.dio.get('/listings/$listingId');
+          return MapEntry(listingId, ListingResponse.fromJson(resp.data));
         } catch (_) {
           return null;
         }
@@ -121,48 +126,42 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         if (entry != null) entry.key: entry.value,
     };
 
-    final ownerIds = <int>{};
-    final listingOwnerIds = <int, int>{};
+    for (final entry in listingDetails.entries) {
+      listingOwnerIds[entry.key] = entry.value.ownerUserId;
+    }
 
-    for (final item in items) {
-      final ownerId =
-          listingCards[item.id]?.ownerUserId ??
-          listingDetails[item.id]?.ownerUserId ??
-          item.ownerUserId;
-      if (ownerId != null) {
-        listingOwnerIds[item.id] = ownerId;
-        ownerIds.add(ownerId);
+    final ownerIds = listingOwnerIds.values.toSet();
+    final unresolvedOwnerIds = ownerIds.where((id) {
+      final hasName = (ownerNames[id]?.trim().isNotEmpty ?? false);
+      final hasAvatar = (ownerAvatars[id]?.trim().isNotEmpty ?? false);
+      return !hasName || !hasAvatar;
+    }).toList();
+
+    final profileMap = await publicProfileCache.resolvePublicProfiles(
+      unresolvedOwnerIds,
+    );
+
+    for (final entry in profileMap.entries) {
+      final profile = entry.value;
+      if (profile == null) continue;
+
+      if (profile.fullName.trim().isNotEmpty) {
+        ownerNames[entry.key] = profile.fullName;
+      }
+
+      final avatar = profile.avatarUrl?.trim();
+      if (avatar != null && avatar.isNotEmpty) {
+        ownerAvatars[entry.key] = avatar;
       }
     }
 
-    final results = await Future.wait(
-      ownerIds.map((id) async {
-        try {
-          final resp = await apiClient.dio.get('/users/$id/public');
-          final profile = PublicUserProfile.fromJson(resp.data);
-          return MapEntry(id, profile);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
-
     if (mounted) {
       setState(() {
-        _listingCards = listingCards;
+        _listingCards = {};
         _listingDetails = listingDetails;
         _listingOwnerIds = listingOwnerIds;
-        _ownerNames = {
-          for (final e in results)
-            if (e != null) e.key: e.value.fullName,
-        };
-        _ownerAvatars = {
-          for (final e in results)
-            if (e != null)
-              e.key: (e.value.avatarUrl?.trim().isNotEmpty == true)
-                  ? e.value.avatarUrl
-                  : null,
-        };
+        _ownerNames = ownerNames;
+        _ownerAvatars = ownerAvatars;
       });
     }
   }
@@ -199,6 +198,22 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         _listingOwnerIds[item.id];
   }
 
+  String? _resolvedSellerAvatar(BookmarkCardResponse item) {
+    final listingAvatar = _resolvedListingCard(item)?.ownerAvatarUrl?.trim();
+    if (listingAvatar != null && listingAvatar.isNotEmpty) return listingAvatar;
+
+    final bookmarkAvatar = item.ownerAvatarUrl?.trim();
+    if (bookmarkAvatar != null && bookmarkAvatar.isNotEmpty) {
+      return bookmarkAvatar;
+    }
+
+    final ownerId = _resolvedOwnerUserId(item);
+    final cachedAvatar = _ownerAvatars[ownerId]?.trim();
+    if (cachedAvatar != null && cachedAvatar.isNotEmpty) return cachedAvatar;
+
+    return null;
+  }
+
   String _resolvedLocation(BookmarkCardResponse item) {
     final listing = _resolvedListing(item);
     return listing?.locationText ??
@@ -216,8 +231,44 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       );
       if (mounted) {
         setState(() => _savedItems.removeWhere((item) => item.id == listingId));
+        AppToast.success(context, 'Item removed from saved list.');
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        AppToast.error(context, 'Could not remove item. Please try again.');
+      }
+    }
+  }
+
+  Future<void> _confirmRemoveItem(BookmarkCardResponse item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Remove Saved Item'),
+          content: Text('Remove "${item.title}" from saved items?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.teal,
+                foregroundColor: AppColors.white,
+              ),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _removeItem(item.id);
+    }
   }
 
   Future<void> _startChat(BookmarkCardResponse item) async {
@@ -230,21 +281,19 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       String sellerName = _displaySellerName(item);
       String? sellerPhone;
       String? sellerAvatar;
-      try {
-        final pResp = await apiClient.dio.get(
-          '/users/${conv.posterUserId}/public',
-        );
-        final profile = PublicUserProfile.fromJson(pResp.data);
+      final profile = await publicProfileCache.resolvePublicProfile(
+        conv.posterUserId,
+      );
+      if (profile != null) {
         sellerName = profile.fullName;
         sellerPhone = profile.phoneNumber;
         final avatarUrl = profile.avatarUrl?.trim();
         sellerAvatar = (avatarUrl != null && avatarUrl.isNotEmpty)
             ? avatarUrl
             : null;
-      } catch (_) {}
+      }
 
-      sellerAvatar ??=
-          _ownerAvatars[_resolvedOwnerUserId(item) ?? conv.posterUserId];
+      sellerAvatar ??= _resolvedSellerAvatar(item);
 
       if (!mounted) return;
       Navigator.push(
@@ -396,6 +445,11 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
 
   Widget _buildSavedItemCard(BookmarkCardResponse item) {
     final isAvailable = item.status == 'ACTIVE';
+    final sellerName = _displaySellerName(item);
+    final sellerAvatar = _resolvedSellerAvatar(item);
+    final sellerInitial = sellerName.isNotEmpty
+        ? sellerName.substring(0, 1).toUpperCase()
+        : '?';
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -407,9 +461,9 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
               productDescription: item.description ?? '',
               price: item.priceUgx,
               imageUrl: item.primaryImageUrl,
-              vendorName: _displaySellerName(item),
+              vendorName: sellerName,
               vendorLocation: _resolvedLocation(item),
-              vendorAvatar: _ownerAvatars[_resolvedOwnerUserId(item)],
+              vendorAvatar: sellerAvatar,
               ownerUserIdHint: _resolvedOwnerUserId(item),
               initiallyBookmarked: true,
             ),
@@ -465,15 +519,39 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _displaySellerName(item),
-                          style: const TextStyle(
-                            color: AppColors.darkGray,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 10,
+                              backgroundColor: AppColors.lightGray,
+                              backgroundImage: sellerAvatar != null
+                                  ? NetworkImage(sellerAvatar)
+                                  : null,
+                              child: sellerAvatar == null
+                                  ? Text(
+                                      sellerInitial,
+                                      style: const TextStyle(
+                                        color: AppColors.mediumGray,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                sellerName,
+                                style: const TextStyle(
+                                  color: AppColors.darkGray,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         // Title
@@ -532,7 +610,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                   // Remove Button
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _removeItem(item.id),
+                      onPressed: () => _confirmRemoveItem(item),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.mediumGray,
                         side: BorderSide(color: AppColors.lightGray, width: 1),

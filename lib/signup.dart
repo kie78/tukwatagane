@@ -7,6 +7,8 @@ import 'login.dart';
 import 'core/api_client.dart';
 import 'core/api_exception.dart';
 import 'core/app_config.dart';
+import 'core/ui/app_toast.dart';
+import 'core/validation/signup_validators.dart';
 import 'config/campus_zones.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -21,6 +23,16 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _regNumberController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+
+  bool _fullNameTouched = false;
+  bool _regNumberTouched = false;
+  bool _emailTouched = false;
+  bool _phoneTouched = false;
+  String? _fullNameError;
+  String? _regNumberError;
+  String? _emailError;
+  String? _phoneError;
+
   bool _useCurrentLocation = false;
   String? _currentLocationText;
   bool _isLoadingLocation = false;
@@ -29,7 +41,79 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _selectedZone;
 
   @override
+  void initState() {
+    super.initState();
+    _fullNameController.addListener(_onFullNameChanged);
+    _regNumberController.addListener(_onRegNumberChanged);
+    _emailController.addListener(_onEmailChanged);
+    _phoneController.addListener(_onPhoneChanged);
+  }
+
+  void _onFullNameChanged() {
+    setState(() {
+      _fullNameTouched = true;
+      _fullNameError = SignupValidators.validateFullName(
+        _fullNameController.text,
+      );
+    });
+  }
+
+  void _onRegNumberChanged() {
+    setState(() {
+      _regNumberTouched = true;
+      _regNumberError = SignupValidators.validateRegistrationNumber(
+        _regNumberController.text,
+      );
+    });
+  }
+
+  void _onEmailChanged() {
+    setState(() {
+      _emailTouched = true;
+      _emailError = SignupValidators.validateUniversityEmail(
+        _emailController.text,
+      );
+    });
+  }
+
+  void _onPhoneChanged() {
+    setState(() {
+      _phoneTouched = true;
+      _phoneError = SignupValidators.validatePhone(_phoneController.text);
+    });
+  }
+
+  bool get _canSubmitForm {
+    final fullNameValid =
+        SignupValidators.validateFullName(_fullNameController.text) == null;
+    final regValid =
+        SignupValidators.validateRegistrationNumber(_regNumberController.text) ==
+        null;
+    final emailValid =
+        SignupValidators.validateUniversityEmail(_emailController.text) == null;
+    final phoneValid = SignupValidators.validatePhone(_phoneController.text) == null;
+    return fullNameValid && regValid && emailValid && phoneValid;
+  }
+
+  void _validateAllVisibleFields() {
+    _fullNameTouched = true;
+    _regNumberTouched = true;
+    _emailTouched = true;
+    _phoneTouched = true;
+    _fullNameError = SignupValidators.validateFullName(_fullNameController.text);
+    _regNumberError = SignupValidators.validateRegistrationNumber(
+      _regNumberController.text,
+    );
+    _emailError = SignupValidators.validateUniversityEmail(_emailController.text);
+    _phoneError = SignupValidators.validatePhone(_phoneController.text);
+  }
+
+  @override
   void dispose() {
+    _fullNameController.removeListener(_onFullNameChanged);
+    _regNumberController.removeListener(_onRegNumberChanged);
+    _emailController.removeListener(_onEmailChanged);
+    _phoneController.removeListener(_onPhoneChanged);
     _fullNameController.dispose();
     _regNumberController.dispose();
     _emailController.dispose();
@@ -51,13 +135,9 @@ class _SignupScreenState extends State<SignupScreen> {
           _useCurrentLocation = false;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Location services are disabled. Please enable them.',
-              ),
-              backgroundColor: Colors.red,
-            ),
+          AppToast.warning(
+            context,
+            'Location services are disabled. Please enable them.',
           );
         }
         return;
@@ -73,12 +153,7 @@ class _SignupScreenState extends State<SignupScreen> {
             _useCurrentLocation = false;
           });
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Location permission denied.'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            AppToast.warning(context, 'Location permission denied.');
           }
           return;
         }
@@ -90,11 +165,9 @@ class _SignupScreenState extends State<SignupScreen> {
           _useCurrentLocation = false;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location permissions are permanently denied.'),
-              backgroundColor: Colors.red,
-            ),
+          AppToast.warning(
+            context,
+            'Location permissions are permanently denied.',
           );
         }
         return;
@@ -116,12 +189,7 @@ class _SignupScreenState extends State<SignupScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Location: $_currentLocationText'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppToast.info(context, 'Location: $_currentLocationText');
       }
     } catch (e) {
       setState(() {
@@ -131,12 +199,7 @@ class _SignupScreenState extends State<SignupScreen> {
         _currentPosition = null;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error getting location: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Error getting location: $e');
       }
     }
   }
@@ -147,27 +210,16 @@ class _SignupScreenState extends State<SignupScreen> {
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
 
-    if (fullName.isEmpty ||
-        regNumber.isEmpty ||
-        email.isEmpty ||
-        phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill in all required fields.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    setState(_validateAllVisibleFields);
+    if (!_canSubmitForm) {
+      AppToast.warning(context, 'Please fix the highlighted fields.');
       return;
     }
 
     if (!AppConfig.isAllowedEmail(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Only @must.ac.ug or @std.must.ac.ug emails are allowed.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      AppToast.warning(
+        context,
+        'Only @must.ac.ug or @std.must.ac.ug emails are allowed.',
       );
       return;
     }
@@ -202,6 +254,7 @@ class _SignupScreenState extends State<SignupScreen> {
       await apiClient.dio.post('/auth/register/start', data: body);
 
       if (!mounted) return;
+      AppToast.success(context, 'Verification code sent.');
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -211,9 +264,7 @@ class _SignupScreenState extends State<SignupScreen> {
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -283,6 +334,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _fullNameController,
                   hintText: 'Michael Okello',
                   icon: Icons.person_outline,
+                  errorText: _fullNameTouched ? _fullNameError : null,
                   keyboardType: TextInputType.name,
                 ),
                 const SizedBox(height: 20),
@@ -292,6 +344,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _regNumberController,
                   hintText: '2023/BIT/...',
                   icon: Icons.badge_outlined,
+                  errorText: _regNumberTouched ? _regNumberError : null,
                   keyboardType: TextInputType.text,
                 ),
                 const SizedBox(height: 20),
@@ -301,6 +354,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _emailController,
                   hintText: '2023example@std.must.ac.ug',
                   icon: Icons.mail_outline,
+                  errorText: _emailTouched ? _emailError : null,
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 20),
@@ -310,6 +364,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _phoneController,
                   hintText: '+256 700 000000',
                   icon: Icons.phone_outlined,
+                  errorText: _phoneTouched ? _phoneError : null,
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 20),
@@ -321,7 +376,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submit,
+                    onPressed: (_isLoading || !_canSubmitForm) ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: AppColors.white,
@@ -396,8 +451,10 @@ class _SignupScreenState extends State<SignupScreen> {
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
+    String? errorText,
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final hasError = errorText != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -417,19 +474,33 @@ class _SignupScreenState extends State<SignupScreen> {
             hintText: hintText,
             hintStyle: TextStyle(color: AppColors.lightGray),
             suffixIcon: Icon(icon, color: AppColors.mediumGray),
+            errorText: errorText,
+            errorStyle: const TextStyle(color: AppColors.darkGray),
             filled: true,
             fillColor: AppColors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.lightGray),
+              borderSide: BorderSide(
+                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.lightGray),
+              borderSide: BorderSide(
+                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: AppColors.teal, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,

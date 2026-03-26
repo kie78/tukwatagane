@@ -8,6 +8,7 @@ import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
 import 'core/stomp_service.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 
 class InboxScreen extends StatefulWidget {
@@ -188,12 +189,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     final phoneNumber = _normalizedPhoneNumber;
     if (phoneNumber == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This seller has no phone number available.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppToast.info(context, 'This seller has no phone number available.');
       return;
     }
 
@@ -205,21 +201,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         mode: LaunchMode.externalApplication,
       );
       if (!didLaunch && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open the phone app.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Could not open the phone app.');
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open the phone app.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.error(context, 'Could not open the phone app.');
     }
   }
 
@@ -272,12 +258,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       _pendingEchos--;
       if (mounted) {
         setState(() => _messages.removeWhere((m) => m.id == tempId));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Send failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Send failed: $e');
       }
     }
   }

@@ -5,6 +5,7 @@ import 'main.dart';
 import 'login.dart';
 import 'core/api_client.dart';
 import 'core/api_exception.dart';
+import 'core/ui/app_toast.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -41,12 +42,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       await apiClient.dio.post('/auth/forgot-password', data: {'email': email});
       if (!mounted) return;
       setState(() => _isCodeSent = true);
+      AppToast.success(context, 'Reset code sent to your email.');
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -54,15 +54,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   void _handleVerify() {
     if (_enteredOtp.length < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the 5-digit code.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter the 5-digit code.');
       return;
     }
     setState(() => _isCodeVerified = true);
+    AppToast.success(context, 'Code verified.');
   }
 
   Future<void> _handleConfirm() async {
@@ -81,12 +77,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         },
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password reset successful. Please log in.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      AppToast.success(context, 'Password reset successful. Please log in.');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -94,9 +85,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

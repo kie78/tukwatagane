@@ -12,6 +12,8 @@ import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
+import 'core/public_profile_cache.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -141,6 +143,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+    publicProfileCache.logDebugStats('BrowseScreen._loadFeed');
     _loadBookmarkedIds();
   }
 
@@ -255,7 +258,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
                     listingId: item.id,
                     productId: item.id.toString(),
                     sellerName: item.ownerFullName ?? 'Seller',
-                    sellerAvatar: _ownerAvatars[item.ownerUserId],
+                    sellerAvatar:
+                        item.ownerAvatarUrl ?? _ownerAvatars[item.ownerUserId],
                     timestamp: _timeAgo(item.createdAt),
                     productTitle: item.title,
                     price: item.priceUgx.toString(),
@@ -368,21 +372,17 @@ class _ProductCardState extends State<ProductCard> {
       }
       bookmarkUpdateNotifier.value++;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isBookmarked
-                  ? 'Added to saved items'
-                  : 'Removed from saved items',
-            ),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
+        AppToast.success(
+          context,
+          _isBookmarked ? 'Added to saved items' : 'Removed from saved items',
         );
       }
     } catch (_) {
       // Revert on failure
-      if (mounted) setState(() => _isBookmarked = !_isBookmarked);
+      if (mounted) {
+        setState(() => _isBookmarked = !_isBookmarked);
+        AppToast.error(context, 'Could not update saved item. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _isBookmarkLoading = false);
     }
@@ -404,12 +404,7 @@ Check out this item on Tukwatagane!
       await Share.share(shareText, subject: widget.productTitle);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sharing: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Error sharing: $e');
       }
     }
   }
@@ -645,14 +640,9 @@ Check out this item on Tukwatagane!
                                   resp.data,
                                 );
                                 String? sellerPhone;
-                                try {
-                                  final pResp = await apiClient.dio.get(
-                                    '/users/${conv.posterUserId}/public',
-                                  );
-                                  sellerPhone = PublicUserProfile.fromJson(
-                                    pResp.data,
-                                  ).phoneNumber;
-                                } catch (_) {}
+                                final profile = await publicProfileCache
+                                    .resolvePublicProfile(conv.posterUserId);
+                                sellerPhone = profile?.phoneNumber;
                                 if (!context.mounted) return;
                                 Navigator.push(
                                   context,

@@ -6,6 +6,8 @@ import 'browse.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
 import 'core/api_exception.dart';
+import 'core/ui/app_toast.dart';
+import 'core/validation/signup_validators.dart';
 import 'models/models.dart';
 
 class AccountAuthScreen extends StatefulWidget {
@@ -35,18 +37,65 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
   bool _isOtpConfirmed = false;
   bool _showPasswordFields = false;
   bool _isLoading = false;
+  bool _otpTouched = false;
+  bool _passwordTouched = false;
+  bool _confirmPasswordTouched = false;
+  String? _otpError;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   String get _enteredOtp => _otpControllers.map((c) => c.text).join();
+  bool get _isOtpComplete => SignupValidators.validateOtp(_enteredOtp) == null;
+  bool get _isPasswordFormValid {
+    final p = SignupValidators.validatePassword(_passwordController.text);
+    final c = SignupValidators.validateConfirmPassword(
+      _passwordController.text,
+      _confirmPasswordController.text,
+    );
+    return p == null && c == null;
+  }
+
+  void _validateOtpInline() {
+    _otpError = SignupValidators.validateOtp(_enteredOtp);
+  }
+
+  void _validatePasswordInline() {
+    _passwordError = SignupValidators.validatePassword(_passwordController.text);
+    _confirmPasswordError = SignupValidators.validateConfirmPassword(
+      _passwordController.text,
+      _confirmPasswordController.text,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_onPasswordChanged);
+    _confirmPasswordController.addListener(_onConfirmPasswordChanged);
+  }
+
+  void _onPasswordChanged() {
+    setState(() {
+      _passwordTouched = true;
+      _validatePasswordInline();
+    });
+  }
+
+  void _onConfirmPasswordChanged() {
+    setState(() {
+      _confirmPasswordTouched = true;
+      _validatePasswordInline();
+    });
+  }
 
   Future<void> _handleOtpSubmit() async {
     final otp = _enteredOtp;
-    if (otp.length < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the 5-digit code.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    setState(() {
+      _otpTouched = true;
+      _validateOtpInline();
+    });
+    if (!_isOtpComplete) {
+      AppToast.warning(context, 'Please enter the 5-digit code.');
       return;
     }
 
@@ -61,12 +110,11 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         _isOtpConfirmed = true;
         _showPasswordFields = true;
       });
+      AppToast.success(context, 'Code verified. Set your password to continue.');
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -76,22 +124,18 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
     final password = _passwordController.text;
     final confirm = _confirmPasswordController.text;
 
+    setState(() {
+      _passwordTouched = true;
+      _confirmPasswordTouched = true;
+      _validatePasswordInline();
+    });
+
     if (password.isEmpty || confirm.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter and confirm your password.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter and confirm your password.');
       return;
     }
-    if (password != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Passwords do not match.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (!_isPasswordFormValid) {
+      AppToast.warning(context, 'Please fix password validation errors.');
       return;
     }
 
@@ -114,6 +158,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         fullName: auth.user.fullName,
       );
       if (!mounted) return;
+      AppToast.success(context, 'Account created successfully.');
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const BrowseScreen()),
@@ -122,9 +167,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -138,6 +181,8 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
     for (var focusNode in _otpFocusNodes) {
       focusNode.dispose();
     }
+    _passwordController.removeListener(_onPasswordChanged);
+    _confirmPasswordController.removeListener(_onConfirmPasswordChanged);
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -307,11 +352,25 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                           } else if (value.isEmpty && index > 0) {
                             _otpFocusNodes[index - 1].requestFocus();
                           }
+                          setState(() {
+                            _otpTouched = true;
+                            _validateOtpInline();
+                          });
                         },
                       ),
                     );
                   }),
                 ),
+                if (_otpTouched && _otpError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _otpError!,
+                    style: const TextStyle(
+                      color: AppColors.darkGray,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 32),
                 // Submit/Confirmed Button
                 SizedBox(
@@ -320,7 +379,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                   child: ElevatedButton(
                     onPressed: (_isOtpConfirmed || _isLoading)
                         ? null
-                        : _handleOtpSubmit,
+                        : (!_isOtpComplete ? null : _handleOtpSubmit),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isOtpConfirmed
                           ? AppColors.teal
@@ -378,6 +437,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     label: 'Password',
                     controller: _passwordController,
                     isPasswordVisible: _isPasswordVisible,
+                    errorText: _passwordTouched ? _passwordError : null,
                     onToggleVisibility: () {
                       setState(() {
                         _isPasswordVisible = !_isPasswordVisible;
@@ -394,6 +454,9 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     label: 'Confirm Password',
                     controller: _confirmPasswordController,
                     isPasswordVisible: _isConfirmPasswordVisible,
+                    errorText: _confirmPasswordTouched
+                        ? _confirmPasswordError
+                        : null,
                     onToggleVisibility: () {
                       setState(() {
                         _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
@@ -406,7 +469,9 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleConfirm,
+                      onPressed: (_isLoading || !_isPasswordFormValid)
+                          ? null
+                          : _handleConfirm,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: AppColors.white,
@@ -584,8 +649,10 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
     required String label,
     required TextEditingController controller,
     required bool isPasswordVisible,
+    String? errorText,
     required VoidCallback onToggleVisibility,
   }) {
+    final hasError = errorText != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -604,6 +671,8 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
           decoration: InputDecoration(
             hintText: '........',
             hintStyle: TextStyle(color: AppColors.lightGray),
+            errorText: errorText,
+            errorStyle: const TextStyle(color: AppColors.darkGray),
             suffixIcon: IconButton(
               icon: Icon(
                 isPasswordVisible
@@ -617,15 +686,27 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
             fillColor: AppColors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.lightGray),
+              borderSide: BorderSide(
+                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.lightGray),
+              borderSide: BorderSide(
+                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: AppColors.teal, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,

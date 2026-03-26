@@ -4,6 +4,7 @@ import 'productDetails.dart';
 import 'inbox.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/public_profile_cache.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -207,16 +208,13 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
 
   Future<void> _loadProfile(int userId) async {
     setState(() => _loadingProfile = true);
-    try {
-      final resp = await apiClient.dio.get('/users/$userId/public');
-      final profile = PublicUserProfile.fromJson(resp.data);
-      if (mounted) {
-        setState(() {
-          _profile = profile;
-          _resolvedVendorUserId = profile.id;
-        });
-      }
-    } catch (_) {}
+    final profile = await publicProfileCache.resolvePublicProfile(userId);
+    if (profile != null && mounted) {
+      setState(() {
+        _profile = profile;
+        _resolvedVendorUserId = profile.id;
+      });
+    }
     if (mounted) setState(() => _loadingProfile = false);
   }
 

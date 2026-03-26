@@ -299,8 +299,7 @@ class ListingCardResponse {
         distanceMeters: j['distanceMeters']?.toDouble(),
         ownerFullName: j['ownerFullName'],
         ownerUserId: j['ownerUserId'],
-        ownerAvatarUrl:
-            (j['ownerAvatarUrl'] ?? j['ownerAvatar'])?.toString(),
+        ownerAvatarUrl: (j['ownerAvatarUrl'] ?? j['ownerAvatar'])?.toString(),
         lat: j['lat']?.toDouble(),
         lng: j['lng']?.toDouble(),
       );
@@ -377,6 +376,7 @@ class BookmarkCardResponse {
   final double? distanceMeters;
   final int? ownerUserId;
   final String? ownerFullName;
+  final String? ownerAvatarUrl;
 
   const BookmarkCardResponse({
     required this.id,
@@ -394,6 +394,7 @@ class BookmarkCardResponse {
     this.distanceMeters,
     this.ownerUserId,
     this.ownerFullName,
+    this.ownerAvatarUrl,
   });
 
   factory BookmarkCardResponse.fromJson(Map<String, dynamic> j) =>
@@ -413,6 +414,7 @@ class BookmarkCardResponse {
         distanceMeters: j['distanceMeters']?.toDouble(),
         ownerUserId: j['ownerUserId'],
         ownerFullName: j['ownerFullName'],
+        ownerAvatarUrl: (j['ownerAvatarUrl'] ?? j['ownerAvatar'])?.toString(),
       );
 }
 

@@ -7,6 +7,7 @@ import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/api_exception.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -147,12 +148,7 @@ class _SellScreenState extends State<SellScreen> {
 
   Future<void> _pickImage() async {
     if (_existingImages.length + _selectedImages.length >= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only 1 photo is allowed'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Only 1 photo is allowed');
       return;
     }
 
@@ -170,23 +166,12 @@ class _SellScreenState extends State<SellScreen> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Photo added (${_selectedImages.length}/1)'),
-              backgroundColor: AppColors.teal,
-              duration: const Duration(seconds: 1),
-            ),
-          );
+          AppToast.info(context, 'Photo added (${_selectedImages.length}/1)');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Error picking image: $e');
       }
     }
   }
@@ -203,58 +188,28 @@ class _SellScreenState extends State<SellScreen> {
     final description = _descriptionController.text.trim();
 
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a title'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter a title');
       return;
     }
     if (priceText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a price'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter a price');
       return;
     }
     final price = int.tryParse(priceText.replaceAll(',', ''));
     if (price == null || price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid price'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter a valid price');
       return;
     }
     if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please select a category');
       return;
     }
     if (!_useRegisteredLocation && _selectedZone == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a location zone'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please select a location zone');
       return;
     }
     if (_useRegisteredLocation && _isLocationLoading) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your location is still loading, please wait a moment'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppToast.info(context, 'Your location is still loading, please wait a moment');
       return;
     }
 
@@ -378,27 +333,16 @@ class _SellScreenState extends State<SellScreen> {
 
       if (mounted) {
         if (uploadsFailed > 0 && _selectedImages.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                uploadsFailed == _selectedImages.length
-                    ? 'Listing saved, but image upload failed. Check your connection and try editing.'
-                    : 'Listing saved, but $uploadsFailed image(s) failed to upload.',
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 5),
-            ),
+          AppToast.warning(
+            context,
+            uploadsFailed == _selectedImages.length
+                ? 'Listing saved, but image upload failed. Check your connection and try editing.'
+                : 'Listing saved, but $uploadsFailed image(s) failed to upload.',
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.editingItemId != null
-                    ? 'Listing updated!'
-                    : 'Listing posted!',
-              ),
-              backgroundColor: AppColors.teal,
-            ),
+          AppToast.success(
+            context,
+            widget.editingItemId != null ? 'Listing updated!' : 'Listing posted!',
           );
         }
         if (widget.editingItemId != null) {
@@ -409,15 +353,11 @@ class _SellScreenState extends State<SellScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
-        );
+        AppToast.error(context, e.message);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AppToast.error(context, 'Error: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

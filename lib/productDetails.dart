@@ -5,6 +5,8 @@ import 'vendorProfile.dart';
 import 'inbox.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/public_profile_cache.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
@@ -217,19 +219,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   Future<void> _fetchOwnerPhone(int ownerUserId) async {
-    try {
-      final resp = await apiClient.dio.get('/users/$ownerUserId/public');
-      final profile = PublicUserProfile.fromJson(resp.data);
-      if (mounted) {
-        setState(() {
-          _ownerPhoneNumber = profile.phoneNumber;
-          final avatarUrl = profile.avatarUrl?.trim();
-          if (avatarUrl != null && avatarUrl.isNotEmpty) {
-            _resolvedVendorAvatarUrl = avatarUrl;
-          }
-        });
+    final profile = await publicProfileCache.resolvePublicProfile(ownerUserId);
+    if (profile == null || !mounted) return;
+
+    setState(() {
+      _ownerPhoneNumber = profile.phoneNumber;
+      final avatarUrl = profile.avatarUrl?.trim();
+      if (avatarUrl != null && avatarUrl.isNotEmpty) {
+        _resolvedVendorAvatarUrl = avatarUrl;
       }
-    } catch (_) {}
+    });
   }
 
   Future<bool> _loadDescriptionFromMyListings() async {
@@ -303,19 +302,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       }
       bookmarkUpdateNotifier.value++;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isBookmarked
-                  ? 'Added to saved items'
-                  : 'Removed from saved items',
-            ),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
+        AppToast.success(
+          context,
+          _isBookmarked ? 'Added to saved items' : 'Removed from saved items',
         );
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        AppToast.error(context, 'Could not update saved item. Please try again.');
+      }
+    }
     if (mounted) setState(() => _isBookmarkLoading = false);
   }
 
@@ -349,11 +345,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     } catch (_) {
       // Fallback: open with a dummy conversationId of 0 (will fail to load msgs gracefully)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open chat. Please try again.'),
-          ),
-        );
+        AppToast.error(context, 'Could not open chat. Please try again.');
       }
     }
     if (mounted) setState(() => _isChatLoading = false);

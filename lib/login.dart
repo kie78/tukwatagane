@@ -7,6 +7,7 @@ import 'forgotPassword.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
 import 'core/api_exception.dart';
+import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -27,12 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your email and password.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppToast.warning(context, 'Please enter your email and password.');
       return;
     }
 
@@ -58,9 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on DioException catch (e) {
       final ex = ApiException.fromDio(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ex.message), backgroundColor: Colors.red),
-      );
+      AppToast.fromApiException(context, ex);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
