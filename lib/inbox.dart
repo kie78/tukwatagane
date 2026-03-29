@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import 'main.dart';
@@ -7,7 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
+import 'core/api_exception.dart';
+import 'core/message_realtime_service.dart';
 import 'core/stomp_service.dart';
+import 'core/unread_service.dart';
 import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 
@@ -53,6 +59,9 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   StompUnsubscribe? _stompUnsub;
   int _tempMsgId = -1; // local counter for optimistic message IDs
   int _pendingEchos = 0; // optimistic messages awaiting STOMP confirmation
+  bool _markingAsRead = false;
+  bool _refreshingUnread = false;
+  Timer? _unreadRefreshDebounce;
 
   // Product reference card state (populated from widget params or fetched)
   String? _productTitle;
@@ -71,6 +80,12 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    openConversationNotifier.value = widget.conversationId;
+    // Record that the user is visiting this conversation now.
+    // This clears the unread dot for this thread in the chat list.
+    conversationVisitedAt[widget.conversationId] = DateTime.now();
+    conversationReadStateNotifier.value++;
+    messageRealtimeService.markConversationRead(widget.conversationId);
     _resolvedAvatarUrl = widget.avatarUrl;
     _init();
   }
@@ -89,7 +104,54 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       _fetchListingDetails(widget.productListingId!);
     }
     await _loadMessages();
+    await _markAsReadAndRefreshUnread();
     _connectStomp();
+  }
+
+  Future<void> _markAsReadAndRefreshUnread() async {
+    if (_markingAsRead) return;
+    _markingAsRead = true;
+    try {
+      await apiClient.dio.patch(
+        '/conversations/${widget.conversationId}/messages/mark-as-read',
+      );
+    } catch (_) {
+      // Keep UI responsive even if mark-as-read fails.
+    }
+
+    if (!mounted) {
+      _markingAsRead = false;
+      return;
+    }
+
+    messageRealtimeService.markConversationRead(widget.conversationId);
+    conversationVisitedAt[widget.conversationId] = DateTime.now();
+    conversationReadStateNotifier.value++;
+    await _refreshUnreadNow(forceRefresh: true);
+
+    _markingAsRead = false;
+  }
+
+  Future<void> _refreshUnreadNow({bool forceRefresh = false}) async {
+    if (_refreshingUnread || !mounted) return;
+    _refreshingUnread = true;
+    try {
+      final count = await unreadService.refreshUnreadCount(
+        fallbackCount: unreadNotifier.value,
+        forceRefresh: forceRefresh,
+      );
+      messageRealtimeService.setServerUnreadCount(count);
+    } catch (_) {}
+    _refreshingUnread = false;
+  }
+
+  void _scheduleUnreadRefresh({
+    Duration delay = const Duration(milliseconds: 350),
+  }) {
+    _unreadRefreshDebounce?.cancel();
+    _unreadRefreshDebounce = Timer(delay, () {
+      _refreshUnreadNow();
+    });
   }
 
   Future<void> _loadCounterpartAvatar() async {
@@ -155,11 +217,19 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               _messages.add(msg);
             }
           });
+          messageRealtimeService.setLatestMessage(widget.conversationId, msg);
+          conversationVisitedAt[widget.conversationId] = msg.createdAt;
+          conversationReadStateNotifier.value++;
+          messageRealtimeService.markConversationRead(widget.conversationId);
           _pendingEchos--;
         } else if (msg.senderUserId != _myUserId) {
           setState(() => _messages.add(msg));
+          messageRealtimeService.setLatestMessage(widget.conversationId, msg);
+          conversationVisitedAt[widget.conversationId] = DateTime.now();
+          conversationReadStateNotifier.value++;
+          messageRealtimeService.markConversationRead(widget.conversationId);
           _scrollToBottom();
-          unreadNotifier.value++;
+          _scheduleUnreadRefresh();
           conversationUpdateNotifier.value++;
         }
         // own-echo with no pending: silently drop (already shown)
@@ -217,8 +287,12 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
 
   @override
   void dispose() {
+    if (openConversationNotifier.value == widget.conversationId) {
+      openConversationNotifier.value = null;
+    }
     routeObserver.unsubscribe(this);
     _stompUnsub?.call();
+    _unreadRefreshDebounce?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -227,6 +301,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   @override
   void didPopNext() {
     _loadMessages();
+    _markAsReadAndRefreshUnread();
   }
 
   Future<void> _sendMessage() async {
@@ -254,11 +329,17 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         data: {'body': text},
       );
       // STOMP will echo the confirmed message back; handled in _connectStomp
+    } on DioException catch (e) {
+      _pendingEchos--;
+      if (mounted) {
+        setState(() => _messages.removeWhere((m) => m.id == tempId));
+        AppToast.fromApiException(context, ApiException.fromDio(e));
+      }
     } catch (e) {
       _pendingEchos--;
       if (mounted) {
         setState(() => _messages.removeWhere((m) => m.id == tempId));
-        AppToast.error(context, 'Send failed: $e');
+        AppToast.error(context, 'Failed to send message. Please try again.');
       }
     }
   }

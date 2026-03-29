@@ -58,18 +58,21 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
 
   List<ListingResponse> get _filteredListings {
     if (_selectedFilter == 'All') return _allListings;
-    if (_selectedFilter == 'Active')
+    if (_selectedFilter == 'Active') {
       return _allListings
           .where((item) => item.status == ListingStatus.ACTIVE)
           .toList();
-    if (_selectedFilter == 'Sold')
+    }
+    if (_selectedFilter == 'Sold') {
       return _allListings
           .where((item) => item.status == ListingStatus.SOLD)
           .toList();
-    if (_selectedFilter == 'Deleted')
+    }
+    if (_selectedFilter == 'Deleted') {
       return _allListings
           .where((item) => item.status == ListingStatus.DELETED)
           .toList();
+    }
     return _allListings;
   }
 

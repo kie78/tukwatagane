@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../models/models.dart';
 import 'app_config.dart';
@@ -8,6 +10,7 @@ class StompService {
   StompClient? _client;
   bool _connected = false;
   Completer<void>? _connectCompleter;
+  final ValueNotifier<int> connectionGenerationNotifier = ValueNotifier(0);
 
   Future<void> connect({required String token}) async {
     // Already connected — nothing to do.
@@ -33,6 +36,8 @@ class StompService {
         reconnectDelay: const Duration(seconds: 5),
         onConnect: (_) {
           _connected = true;
+          connectionGenerationNotifier.value =
+              connectionGenerationNotifier.value + 1;
           if (!(_connectCompleter?.isCompleted ?? true)) {
             _connectCompleter?.complete();
           }

@@ -9,27 +9,31 @@ class ApiClient {
   late final Dio _dio;
 
   ApiClient() {
-    _dio = Dio(BaseOptions(
-      baseUrl: AppConfig.baseUrl,
-      connectTimeout: const Duration(seconds: 180),
-      receiveTimeout: const Duration(seconds: 180),
-      headers: {'Content-Type': 'application/json'},
-    ));
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: AppConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {'Content-Type': 'application/json'},
+      ),
+    );
 
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        if (!options.path.contains('/auth/')) {
-          final token = await _storage.read(key: _tokenKey);
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          if (!options.path.contains('/auth/')) {
+            final token = await _storage.read(key: _tokenKey);
+            if (token != null) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
           }
-        }
-        handler.next(options);
-      },
-      onError: (DioException e, handler) {
-        handler.next(e);
-      },
-    ));
+          handler.next(options);
+        },
+        onError: (DioException e, handler) {
+          handler.next(e);
+        },
+      ),
+    );
   }
 
   Dio get dio => _dio;

@@ -4,6 +4,7 @@ import 'productDetails.dart';
 import 'inbox.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/conversation_service.dart';
 import 'core/public_profile_cache.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
@@ -623,22 +624,24 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                     final id = widget.listingId;
                     if (id == null) return;
                     try {
-                      final resp = await apiClient.dio.post(
-                        '/conversations',
-                        data: {'listingId': id},
-                      );
-                      final conv = ConversationResponse.fromJson(resp.data);
+                      final openResult = await conversationService
+                          .getOrCreateConversation(
+                            listingId: id,
+                            sellerUserId: _resolvedVendorUserId,
+                          );
                       if (!context.mounted) return;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => InboxScreen(
-                            conversationId: conv.id,
+                            conversationId: openResult.conversationId,
                             userName: _displayVendorName,
                             avatarUrl: _resolvedVendorAvatarUrl,
                             isOnline: widget.isOnline,
                             phoneNumber: _profile?.phoneNumber,
-                            counterpartUserId: _resolvedVendorUserId,
+                            counterpartUserId:
+                                _resolvedVendorUserId ??
+                                openResult.counterpartUserId,
                             productListingId: id,
                           ),
                         ),

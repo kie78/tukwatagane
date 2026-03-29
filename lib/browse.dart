@@ -11,8 +11,10 @@ import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
+import 'core/conversation_service.dart';
 import 'core/auth_service.dart';
 import 'core/public_profile_cache.dart';
+import 'core/unread_service.dart';
 import 'core/ui/app_toast.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
@@ -72,7 +74,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
       final items = (resp.data['items'] as List)
           .map((e) => ConversationListItem.fromJson(e))
           .toList();
-      unreadNotifier.value = items.fold(0, (sum, c) => sum + c.unreadCount);
+      final fallback = items.fold(0, (sum, c) => sum + c.unreadCount);
+      unreadNotifier.value = await unreadService.refreshUnreadCount(
+        fallbackCount: fallback,
+      );
     } catch (_) {}
   }
 
@@ -242,7 +247,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   TextButton.icon(
                     onPressed: _loadFeed,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Reload'),
+                    label: const Text('Refresh'),
                   ),
                 ],
               ),
@@ -250,7 +255,6 @@ class _BrowseScreenState extends State<BrowseScreen> {
           : RefreshIndicator(
               onRefresh: _loadFeed,
               child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 itemCount: _listings.length,
                 itemBuilder: (context, index) {
                   final item = _listings[index];
@@ -381,7 +385,10 @@ class _ProductCardState extends State<ProductCard> {
       // Revert on failure
       if (mounted) {
         setState(() => _isBookmarked = !_isBookmarked);
-        AppToast.error(context, 'Could not update saved item. Please try again.');
+        AppToast.error(
+          context,
+          'Could not update saved item. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isBookmarkLoading = false);
@@ -632,30 +639,30 @@ Check out this item on Tukwatagane!
                           child: ElevatedButton.icon(
                             onPressed: () async {
                               try {
-                                final resp = await apiClient.dio.post(
-                                  '/conversations',
-                                  data: {'listingId': widget.listingId},
-                                );
-                                final conv = ConversationResponse.fromJson(
-                                  resp.data,
-                                );
+                                final openResult = await conversationService
+                                    .getOrCreateConversation(
+                                      listingId: widget.listingId,
+                                      sellerUserId: widget.ownerUserId,
+                                    );
                                 String? sellerPhone;
                                 final profile = await publicProfileCache
-                                    .resolvePublicProfile(conv.posterUserId);
+                                    .resolvePublicProfile(
+                                      openResult.counterpartUserId,
+                                    );
                                 sellerPhone = profile?.phoneNumber;
                                 if (!context.mounted) return;
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => InboxScreen(
-                                      conversationId: conv.id,
+                                      conversationId: openResult.conversationId,
                                       userName: widget.sellerName,
                                       avatarUrl: widget.sellerAvatar,
                                       isOnline: false,
                                       phoneNumber: sellerPhone,
                                       counterpartUserId:
                                           widget.ownerUserId ??
-                                          conv.posterUserId,
+                                          openResult.counterpartUserId,
                                       productTitle: widget.productTitle,
                                       productImage: widget.imageUrl,
                                       productPrice: int.parse(

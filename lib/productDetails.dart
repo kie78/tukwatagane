@@ -5,6 +5,7 @@ import 'vendorProfile.dart';
 import 'inbox.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/conversation_service.dart';
 import 'core/public_profile_cache.dart';
 import 'core/ui/app_toast.dart';
 import 'models/models.dart';
@@ -309,7 +310,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       }
     } catch (_) {
       if (mounted) {
-        AppToast.error(context, 'Could not update saved item. Please try again.');
+        AppToast.error(
+          context,
+          'Could not update saved item. Please try again.',
+        );
       }
     }
     if (mounted) setState(() => _isBookmarkLoading = false);
@@ -319,21 +323,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     if (widget.listingId == null) return;
     setState(() => _isChatLoading = true);
     try {
-      final resp = await apiClient.dio.post(
-        '/conversations',
-        data: {'listingId': widget.listingId},
+      final openResult = await conversationService.getOrCreateConversation(
+        listingId: widget.listingId!,
+        sellerUserId: _ownerUserId,
       );
-      final conv = ConversationResponse.fromJson(resp.data);
       if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => InboxScreen(
-              conversationId: conv.id,
+              conversationId: openResult.conversationId,
               userName: widget.vendorName,
               avatarUrl: _resolvedVendorAvatarUrl ?? widget.vendorAvatar,
               phoneNumber: _ownerPhoneNumber,
-              counterpartUserId: _ownerUserId ?? conv.posterUserId,
+              counterpartUserId: _ownerUserId ?? openResult.counterpartUserId,
               productTitle: widget.productTitle,
               productImage: widget.imageUrl,
               productPrice: widget.price,

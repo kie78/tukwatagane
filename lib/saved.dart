@@ -5,6 +5,7 @@ import 'inbox.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
+import 'core/conversation_service.dart';
 import 'core/public_profile_cache.dart';
 import 'core/ui/app_toast.dart';
 import 'models/models.dart';
@@ -245,7 +246,9 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Text('Remove Saved Item'),
           content: Text('Remove "${item.title}" from saved items?'),
           actions: [
@@ -273,16 +276,15 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
 
   Future<void> _startChat(BookmarkCardResponse item) async {
     try {
-      final resp = await apiClient.dio.post(
-        '/conversations',
-        data: {'listingId': item.id},
+      final openResult = await conversationService.getOrCreateConversation(
+        listingId: item.id,
+        sellerUserId: _resolvedOwnerUserId(item),
       );
-      final conv = ConversationResponse.fromJson(resp.data);
       String sellerName = _displaySellerName(item);
       String? sellerPhone;
       String? sellerAvatar;
       final profile = await publicProfileCache.resolvePublicProfile(
-        conv.posterUserId,
+        openResult.counterpartUserId,
       );
       if (profile != null) {
         sellerName = profile.fullName;
@@ -300,12 +302,13 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
         context,
         MaterialPageRoute(
           builder: (context) => InboxScreen(
-            conversationId: conv.id,
+            conversationId: openResult.conversationId,
             userName: sellerName,
             avatarUrl: sellerAvatar,
             isOnline: false,
             phoneNumber: sellerPhone,
-            counterpartUserId: _resolvedOwnerUserId(item) ?? conv.posterUserId,
+            counterpartUserId:
+                _resolvedOwnerUserId(item) ?? openResult.counterpartUserId,
             productTitle: item.title,
             productImage: item.primaryImageUrl,
             productPrice: item.priceUgx,

@@ -86,7 +86,7 @@ class PublicProfileCache {
     final hitRate = totalResolutions == 0
         ? 0
         : ((resolvedFromMemory * 100) ~/ totalResolutions);
-    return 'PublicProfileCache(stats: hits=$_cacheHits, joins=$_inFlightJoins, misses=$_cacheMisses, fetches=$_networkFetches, hitRate=${hitRate}%)';
+    return 'PublicProfileCache(stats: hits=$_cacheHits, joins=$_inFlightJoins, misses=$_cacheMisses, fetches=$_networkFetches, hitRate=$hitRate%)';
   }
 
   void logDebugStats([String context = '']) {

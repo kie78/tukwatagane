@@ -107,8 +107,9 @@ class _SellScreenState extends State<SellScreen> {
       await apiClient.dio.delete(
         '/listings/${widget.editingItemId}/images/${img.id}',
       );
-      if (mounted)
+      if (mounted) {
         setState(() => _existingImages.removeWhere((i) => i.id == img.id));
+      }
     } catch (_) {}
   }
 

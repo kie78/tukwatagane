@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'main.dart';
 import 'inbox.dart';
@@ -5,6 +7,8 @@ import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
+import 'core/message_realtime_service.dart';
+import 'core/unread_service.dart';
 import 'models/models.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -24,10 +28,23 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     super.initState();
     _loadConversations();
     conversationUpdateNotifier.addListener(_onConversationUpdate);
+    conversationReadStateNotifier.addListener(_onRealtimeStateChanged);
+    messageRealtimeService.unreadConversationIdsNotifier.addListener(
+      _onRealtimeStateChanged,
+    );
+    messageRealtimeService.latestMessagesNotifier.addListener(
+      _onRealtimeStateChanged,
+    );
   }
 
   void _onConversationUpdate() {
     if (mounted) _loadConversations();
+  }
+
+  void _onRealtimeStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -39,6 +56,13 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   @override
   void dispose() {
     conversationUpdateNotifier.removeListener(_onConversationUpdate);
+    conversationReadStateNotifier.removeListener(_onRealtimeStateChanged);
+    messageRealtimeService.unreadConversationIdsNotifier.removeListener(
+      _onRealtimeStateChanged,
+    );
+    messageRealtimeService.latestMessagesNotifier.removeListener(
+      _onRealtimeStateChanged,
+    );
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -56,8 +80,17 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
         queryParameters: {'page': 0, 'size': 50},
       );
       final items = (resp.data['items'] as List)
-          .map((e) => ConversationListItem.fromJson(e))
+          .map((e) => ConversationListItem.fromJson(e as Map<String, dynamic>))
           .toList();
+      // Seed first-time-seen conversations as "read" at their current lastMessageAt.
+      // Subsequent new messages (arriving via STOMP) will post-date this timestamp
+      // and cause the unread dot to appear without backend unreadCount support.
+      for (final item in items) {
+        conversationVisitedAt.putIfAbsent(
+          item.id,
+          () => item.lastMessageAt ?? DateTime.now(),
+        );
+      }
       final avatarMap = await avatarResolver.resolveAvatarUrls(
         items.map((item) => item.counterpartUserId),
       );
@@ -66,7 +99,18 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
           _groups = _groupConversations(items);
           _counterpartAvatars = avatarMap;
         });
-        unreadNotifier.value = items.fold(0, (sum, c) => sum + c.unreadCount);
+        final fallback = items.fold(0, (sum, c) => sum + c.unreadCount);
+        messageRealtimeService.setServerUnreadCount(fallback);
+        unawaited(
+          unreadService
+              .refreshUnreadCount(fallbackCount: fallback)
+              .then((count) {
+            if (mounted) {
+              messageRealtimeService.setServerUnreadCount(count);
+            }
+          }).catchError((_) {}),
+        );
+        unawaited(messageRealtimeService.refreshSubscriptions());
       }
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
@@ -75,6 +119,16 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   List<_ConversationGroup> _groupConversations(
     List<ConversationListItem> items,
   ) {
+    DateTime? effectiveLastMessageAt(ConversationListItem item) {
+      final live = messageRealtimeService.latestMessagesNotifier.value[item.id];
+      return live?.createdAt ?? item.lastMessageAt;
+    }
+
+    String? effectiveLastMessageBody(ConversationListItem item) {
+      final live = messageRealtimeService.latestMessagesNotifier.value[item.id];
+      return live?.body ?? item.lastMessageBody;
+    }
+
     final map = <int, List<ConversationListItem>>{};
     for (final c in items) {
       map.putIfAbsent(c.counterpartUserId, () => []).add(c);
@@ -83,9 +137,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
         map.entries.map((e) {
           final convs = List<ConversationListItem>.from(e.value)
             ..sort((a, b) {
-              if (a.lastMessageAt == null) return 1;
-              if (b.lastMessageAt == null) return -1;
-              return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+              final aTime = effectiveLastMessageAt(a);
+              final bTime = effectiveLastMessageAt(b);
+              if (aTime == null) return 1;
+              if (bTime == null) return -1;
+              return bTime.compareTo(aTime);
             });
           return _ConversationGroup(
             counterpartUserId: e.key,
@@ -94,14 +150,14 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             counterpartActiveNow: convs.any((c) => c.counterpartActiveNow),
             totalUnread: convs.fold(0, (sum, c) => sum + c.unreadCount),
             mostRecent: convs.first,
+            effectiveLastMessageAt: effectiveLastMessageAt(convs.first),
+            effectiveLastMessageBody: effectiveLastMessageBody(convs.first),
             conversations: convs,
           );
         }).toList()..sort((a, b) {
-          if (a.mostRecent.lastMessageAt == null) return 1;
-          if (b.mostRecent.lastMessageAt == null) return -1;
-          return b.mostRecent.lastMessageAt!.compareTo(
-            a.mostRecent.lastMessageAt!,
-          );
+          if (a.effectiveLastMessageAt == null) return 1;
+          if (b.effectiveLastMessageAt == null) return -1;
+          return b.effectiveLastMessageAt!.compareTo(a.effectiveLastMessageAt!);
         });
     return groups;
   }
@@ -200,6 +256,8 @@ class _ConversationGroup {
   final bool counterpartActiveNow;
   final int totalUnread;
   final ConversationListItem mostRecent;
+  final DateTime? effectiveLastMessageAt;
+  final String? effectiveLastMessageBody;
   final List<ConversationListItem> conversations;
 
   const _ConversationGroup({
@@ -209,6 +267,8 @@ class _ConversationGroup {
     required this.counterpartActiveNow,
     required this.totalUnread,
     required this.mostRecent,
+    this.effectiveLastMessageAt,
+    this.effectiveLastMessageBody,
     required this.conversations,
   });
 }
@@ -217,7 +277,10 @@ class _GroupedChatTile extends StatelessWidget {
   final _ConversationGroup group;
   final String? avatarUrl;
 
-  const _GroupedChatTile({required this.group, this.avatarUrl});
+  const _GroupedChatTile({
+    required this.group,
+    this.avatarUrl,
+  });
 
   String _timeAgo(DateTime? dt) {
     if (dt == null) return '';
@@ -277,7 +340,17 @@ class _GroupedChatTile extends StatelessWidget {
     final resolvedAvatarUrl = (avatarUrl?.trim().isNotEmpty == true)
         ? avatarUrl
         : null;
-    final hasUnread = group.totalUnread > 0;
+    final hasUnread =
+      messageRealtimeService.unreadConversationIdsNotifier.value.any(
+        (id) => group.conversations.any((c) => c.id == id),
+      ) ||
+      group.conversations.any((conv) {
+      final visitedAt = conversationVisitedAt[conv.id];
+      final live = messageRealtimeService.latestMessagesNotifier.value[conv.id];
+      final messageAt = live?.createdAt ?? conv.lastMessageAt;
+      return messageAt != null &&
+        (visitedAt == null || messageAt.isAfter(visitedAt));
+    });
     final subtitle = group.conversations.length > 1
         ? '${group.conversations.length} active threads'
         : group.mostRecent.listingTitle;
@@ -334,10 +407,10 @@ class _GroupedChatTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (group.mostRecent.lastMessageBody != null) ...[
+                  if (group.effectiveLastMessageBody != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      group.mostRecent.lastMessageBody!,
+                      group.effectiveLastMessageBody!,
                       style: TextStyle(
                         color: hasUnread
                             ? AppColors.darkGray
@@ -359,7 +432,7 @@ class _GroupedChatTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  _timeAgo(group.mostRecent.lastMessageAt),
+                  _timeAgo(group.effectiveLastMessageAt),
                   style: const TextStyle(
                     color: AppColors.mediumGray,
                     fontSize: 12,

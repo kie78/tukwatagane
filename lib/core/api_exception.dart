@@ -14,14 +14,37 @@ class ApiException implements Exception {
   });
 
   factory ApiException.fromDio(DioException e) {
+    final dioType = e.type;
+
+    if (dioType == DioExceptionType.connectionTimeout ||
+        dioType == DioExceptionType.sendTimeout ||
+        dioType == DioExceptionType.receiveTimeout) {
+      return const ApiException(
+        statusCode: 0,
+        code: 'TIMEOUT',
+        message:
+            'The server is taking too long to respond. Please check your connection and try again.',
+      );
+    }
+
+    if (dioType == DioExceptionType.connectionError) {
+      return const ApiException(
+        statusCode: 0,
+        code: 'NETWORK_ERROR',
+        message:
+            'Could not reach the server. Please check your internet connection and try again.',
+      );
+    }
+
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {
       return ApiException(
         statusCode: e.response?.statusCode ?? 0,
         code: data['code'] ?? 'UNKNOWN',
         message: data['message'] ?? e.message ?? 'Unknown error',
-        fieldErrors: (data['fieldErrors'] as Map<String, dynamic>?)
-            ?.map((k, v) => MapEntry(k, v.toString())),
+        fieldErrors: (data['fieldErrors'] as Map<String, dynamic>?)?.map(
+          (k, v) => MapEntry(k, v.toString()),
+        ),
       );
     }
     return ApiException(
