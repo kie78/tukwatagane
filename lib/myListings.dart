@@ -124,10 +124,22 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                   onTap: () {
                     Navigator.pushReplacementNamed(context, '/account');
                   },
-                  child: Icon(
-                    Icons.arrow_back,
-                    color: AppColors.of(context).darkGray,
-                    size: 28,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.of(context).lightGray,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.of(context).mediumGray.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.arrow_back,
+                      color: AppColors.of(context).darkGray,
+                      size: 20,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'login.dart';
 import 'browse.dart';
 import 'core/auth_service.dart';
@@ -57,6 +58,7 @@ void main() async {
 class AppThemeColors extends ThemeExtension<AppThemeColors> {
   const AppThemeColors({
     required this.primary,
+    required this.accent,
     required this.darkGray,
     required this.mediumGray,
     required this.lightGray,
@@ -64,6 +66,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   });
 
   final Color primary;
+  final Color accent;
   final Color darkGray;
   final Color mediumGray;
   final Color lightGray;
@@ -71,6 +74,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
 
   static const light = AppThemeColors(
     primary: Color(0xFF000000),
+    accent: Color(0xFF000000),
     darkGray: Color(0xFF2D3748),
     mediumGray: Color(0xFF718096),
     lightGray: Color(0xFFE2E8F0),
@@ -79,10 +83,11 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
 
   static const dark = AppThemeColors(
     primary: Color(0xFFFFFFFF),
+    accent: Color(0xFFFFFFFF),
     darkGray: Color(0xFFE2E8F0),
     mediumGray: Color(0xFF718096),
     lightGray: Color(0xFF1A202C),
-    white: Color(0xFF2D3748),
+    white: Color(0xFF3D4D61),
   );
 
   static AppThemeColors of(BuildContext context) =>
@@ -91,6 +96,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   @override
   AppThemeColors copyWith({
     Color? primary,
+    Color? accent,
     Color? darkGray,
     Color? mediumGray,
     Color? lightGray,
@@ -98,6 +104,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   }) {
     return AppThemeColors(
       primary: primary ?? this.primary,
+      accent: accent ?? this.accent,
       darkGray: darkGray ?? this.darkGray,
       mediumGray: mediumGray ?? this.mediumGray,
       lightGray: lightGray ?? this.lightGray,
@@ -110,6 +117,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     if (other == null) return this;
     return AppThemeColors(
       primary: Color.lerp(primary, other.primary, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
       darkGray: Color.lerp(darkGray, other.darkGray, t)!,
       mediumGray: Color.lerp(mediumGray, other.mediumGray, t)!,
       lightGray: Color.lerp(lightGray, other.lightGray, t)!,
@@ -144,6 +152,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       backgroundColor: AppThemeColors.light.white,
       elevation: 0,
     ),
+    textTheme: GoogleFonts.nunitoTextTheme(),
     extensions: const [AppThemeColors.light],
     useMaterial3: true,
   );
@@ -158,6 +167,9 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     appBarTheme: AppBarTheme(
       backgroundColor: AppThemeColors.dark.white,
       elevation: 0,
+    ),
+    textTheme: GoogleFonts.nunitoTextTheme(
+      ThemeData(brightness: Brightness.dark).textTheme,
     ),
     extensions: const [AppThemeColors.dark],
     useMaterial3: true,

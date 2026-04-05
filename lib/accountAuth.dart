@@ -670,7 +670,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
           obscureText: !isPasswordVisible,
           decoration: InputDecoration(
             hintText: '........',
-            hintStyle: TextStyle(color: AppColors.of(context).lightGray),
+            hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
             errorText: errorText,
             errorStyle: TextStyle(color: AppColors.of(context).darkGray),
             suffixIcon: IconButton(

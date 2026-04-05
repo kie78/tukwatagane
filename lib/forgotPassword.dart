@@ -207,7 +207,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: '2023example@std.must.ac.ug',
-                        hintStyle: TextStyle(color: AppColors.of(context).lightGray),
+                        hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                         suffixIcon: Icon(
                           Icons.mail_outline,
                           color: AppColors.of(context).mediumGray,
@@ -433,7 +433,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         obscureText: !_isPasswordVisible,
                         decoration: InputDecoration(
                           hintText: '........',
-                          hintStyle: TextStyle(color: AppColors.of(context).lightGray),
+                          hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _isPasswordVisible

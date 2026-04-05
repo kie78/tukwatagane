@@ -139,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: 'studentNumber@must.ac.ug',
-                        hintStyle: TextStyle(color: AppColors.of(context).lightGray),
+                        hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                         suffixIcon: Icon(
                           Icons.mail_outline,
                           color: AppColors.of(context).mediumGray,
@@ -188,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         hintText: '........',
-                        hintStyle: TextStyle(color: AppColors.of(context).lightGray),
+                        hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isPasswordVisible
