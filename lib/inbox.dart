@@ -29,6 +29,7 @@ class InboxScreen extends StatefulWidget {
   final String? productImage;
   final int? productPrice;
   final int? productListingId;
+  final bool armProductReferenceOnOpen;
   final int? counterpartUserId;
 
   const InboxScreen({
@@ -44,6 +45,7 @@ class InboxScreen extends StatefulWidget {
     this.productImage,
     this.productPrice,
     this.productListingId,
+    this.armProductReferenceOnOpen = false,
     this.counterpartUserId,
   });
 
@@ -51,11 +53,28 @@ class InboxScreen extends StatefulWidget {
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
+class _ReferencedListingPreview {
+  final int listingId;
+  final String title;
+  final String? imageUrl;
+  final int? price;
+
+  const _ReferencedListingPreview({
+    required this.listingId,
+    required this.title,
+    this.imageUrl,
+    this.price,
+  });
+}
+
 class _InboxScreenState extends State<InboxScreen> with RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<MessageResponse> _messages = [];
+  final Map<int, _ReferencedListingPreview> _referencedListingPreviews = {};
+  final Set<int> _loadingReferencedListingIds = <int>{};
   int? _myUserId;
+  int? _pendingReferencedListingId;
   StompUnsubscribe? _stompUnsub;
   int _tempMsgId = -1; // local counter for optimistic message IDs
   int _pendingEchos = 0; // optimistic messages awaiting STOMP confirmation
@@ -63,10 +82,6 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   bool _refreshingUnread = false;
   Timer? _unreadRefreshDebounce;
 
-  // Product reference card state (populated from widget params or fetched)
-  String? _productTitle;
-  String? _productImageUrl;
-  int? _productPrice;
   String? _resolvedAvatarUrl;
 
   String? get _effectiveAvatarUrl {
@@ -86,6 +101,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     conversationVisitedAt[widget.conversationId] = DateTime.now();
     conversationReadStateNotifier.value++;
     messageRealtimeService.markConversationRead(widget.conversationId);
+    _pendingReferencedListingId =
+      widget.armProductReferenceOnOpen ? widget.productListingId : null;
     _resolvedAvatarUrl = widget.avatarUrl;
     _init();
   }
@@ -93,19 +110,41 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   Future<void> _init() async {
     _myUserId = await authService.getUserId();
     await _loadCounterpartAvatar();
-    // Use widget params if available; otherwise fetch from API
-    if (widget.productTitle != null) {
-      setState(() {
-        _productTitle = widget.productTitle;
-        _productImageUrl = widget.productImage;
-        _productPrice = widget.productPrice;
-      });
-    } else if (widget.productListingId != null) {
-      _fetchListingDetails(widget.productListingId!);
-    }
+    _seedInitialReferencedListingPreview();
     await _loadMessages();
     await _markAsReadAndRefreshUnread();
     _connectStomp();
+  }
+
+  void _seedInitialReferencedListingPreview() {
+    final listingId = widget.productListingId;
+    if (listingId == null) return;
+
+    final title = widget.productTitle?.trim();
+    final imageUrl = widget.productImage?.trim();
+    final hasSeedData =
+        (title != null && title.isNotEmpty) ||
+        (imageUrl != null && imageUrl.isNotEmpty) ||
+        widget.productPrice != null;
+
+    if (hasSeedData) {
+      _referencedListingPreviews[listingId] = _ReferencedListingPreview(
+        listingId: listingId,
+        title: (title != null && title.isNotEmpty) ? title : 'Listing',
+        imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null,
+        price: widget.productPrice,
+      );
+    }
+
+    final preview = _referencedListingPreviews[listingId];
+    final needsBackfill = preview == null ||
+        preview.title.trim().isEmpty ||
+        preview.imageUrl == null ||
+        preview.imageUrl!.trim().isEmpty ||
+        preview.price == null;
+    if (needsBackfill) {
+      unawaited(_ensureReferencedListingLoaded(listingId));
+    }
   }
 
   Future<void> _markAsReadAndRefreshUnread() async {
@@ -168,17 +207,44 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     }
   }
 
-  Future<void> _fetchListingDetails(int listingId) async {
+  Future<void> _ensureReferencedListingLoaded(int listingId) async {
+    if (_loadingReferencedListingIds.contains(listingId)) return;
+    _loadingReferencedListingIds.add(listingId);
     try {
       final resp = await apiClient.dio.get('/listings/$listingId');
+      final listing = ListingResponse.fromJson(resp.data);
+      final fetchedImageUrl = listing.images.isNotEmpty
+          ? listing.images.first.secureUrl
+          : listing.primaryImageUrl?.trim();
       if (mounted) {
         setState(() {
-          _productTitle = resp.data['title'] as String?;
-          _productImageUrl = resp.data['primaryImageUrl'] as String?;
-          _productPrice = resp.data['priceUgx'] as int?;
+          final existing = _referencedListingPreviews[listingId];
+          _referencedListingPreviews[listingId] = _ReferencedListingPreview(
+            listingId: listingId,
+            title: existing?.title.trim().isNotEmpty == true
+                ? existing!.title
+                : listing.title,
+            imageUrl: existing?.imageUrl?.trim().isNotEmpty == true
+                ? existing!.imageUrl
+                : fetchedImageUrl,
+            price: existing?.price ?? listing.priceUgx,
+          );
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Keep chat usable even if referenced listing preview fails to load.
+    } finally {
+      _loadingReferencedListingIds.remove(listingId);
+    }
+  }
+
+  void _primeReferencedListings(Iterable<MessageResponse> messages) {
+    for (final message in messages) {
+      final listingId = message.referencedListingId;
+      if (listingId != null) {
+        unawaited(_ensureReferencedListingLoaded(listingId));
+      }
+    }
   }
 
   Future<void> _loadMessages() async {
@@ -190,6 +256,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       final items = (resp.data['items'] as List)
           .map((e) => MessageResponse.fromJson(e))
           .toList();
+      _primeReferencedListings(items);
       if (mounted) {
         setState(() => _messages = items);
         _scrollToBottom();
@@ -218,6 +285,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             }
           });
           messageRealtimeService.setLatestMessage(widget.conversationId, msg);
+          _primeReferencedListings([msg]);
           conversationVisitedAt[widget.conversationId] = msg.createdAt;
           conversationReadStateNotifier.value++;
           messageRealtimeService.markConversationRead(widget.conversationId);
@@ -225,6 +293,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         } else if (msg.senderUserId != _myUserId) {
           setState(() => _messages.add(msg));
           messageRealtimeService.setLatestMessage(widget.conversationId, msg);
+          _primeReferencedListings([msg]);
           conversationVisitedAt[widget.conversationId] = DateTime.now();
           conversationReadStateNotifier.value++;
           messageRealtimeService.markConversationRead(widget.conversationId);
@@ -308,6 +377,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
     _messageController.clear();
+    final referencedListingId = _pendingReferencedListingId;
 
     // Optimistically add to UI immediately
     final tempId = _tempMsgId--;
@@ -316,9 +386,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       conversationId: widget.conversationId,
       senderUserId: _myUserId ?? 0,
       body: text,
+      referencedListingId: referencedListingId,
       createdAt: DateTime.now(),
     );
     setState(() => _messages.add(optimistic));
+    _primeReferencedListings([optimistic]);
     _pendingEchos++;
     _scrollToBottom();
     conversationUpdateNotifier.value++;
@@ -326,8 +398,13 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     try {
       await apiClient.dio.post(
         '/conversations/${widget.conversationId}/messages',
-        data: {'body': text},
+        data: {
+          'body': text,
+          if (referencedListingId != null)
+            'referencedListingId': referencedListingId,
+        },
       );
+      _pendingReferencedListingId = null;
       // STOMP will echo the confirmed message back; handled in _connectStomp
     } on DioException catch (e) {
       _pendingEchos--;
@@ -349,10 +426,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     final avatarUrl = _effectiveAvatarUrl;
 
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).darkGray),
           onPressed: () {
             Navigator.pop(context);
           },
@@ -385,21 +462,21 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                   else if (widget.businessName != null)
                     CircleAvatar(
                       radius: 20,
-                      backgroundColor: AppColors.darkGray,
+                      backgroundColor: AppColors.of(context).darkGray,
                       child: Icon(
                         Icons.store,
-                        color: AppColors.white,
+                        color: AppColors.of(context).white,
                         size: 20,
                       ),
                     )
                   else
                     CircleAvatar(
                       radius: 20,
-                      backgroundColor: AppColors.lightGray,
+                      backgroundColor: AppColors.of(context).lightGray,
                       child: Text(
                         widget.initials ?? '',
                         style: TextStyle(
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                         ),
@@ -417,7 +494,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                   Text(
                     widget.userName,
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -429,7 +506,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.phone, color: Colors.black),
+            icon: Icon(Icons.phone, color: AppColors.of(context).primary),
             onPressed: _openDialer,
           ),
         ],
@@ -440,8 +517,6 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
           Expanded(
             child: Column(
               children: [
-                // Product Reference Card (if available)
-                if (_productTitle != null) _buildProductReferenceCard(),
                 // Messages or Empty State
                 Expanded(
                   child: _messages.isEmpty
@@ -457,16 +532,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                             final timeStr = _formatTime(message.createdAt);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
-                              child: isOutgoing
-                                  ? _buildOutgoingMessage(
-                                      message.body,
-                                      timeStr,
-                                      isDelivered: true,
-                                    )
-                                  : _buildIncomingMessage(
-                                      message.body,
-                                      timeStr,
-                                    ),
+                              child: _buildMessageItem(
+                                message,
+                                timeStr,
+                                isOutgoing: isOutgoing,
+                              ),
                             );
                           },
                         ),
@@ -478,7 +548,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.white,
+              color: AppColors.of(context).white,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -494,10 +564,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppColors.white,
+                        color: AppColors.of(context).white,
                         borderRadius: BorderRadius.circular(25),
                         border: Border.all(
-                          color: AppColors.lightGray,
+                          color: AppColors.of(context).lightGray,
                           width: 1,
                         ),
                       ),
@@ -506,7 +576,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                         decoration: InputDecoration(
                           hintText: 'Enter message...',
                           hintStyle: TextStyle(
-                            color: AppColors.mediumGray,
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 14,
                           ),
                           border: InputBorder.none,
@@ -524,13 +594,13 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: AppColors.of(context).primary,
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.send,
-                        color: AppColors.white,
+                        color: AppColors.of(context).white,
                         size: 18,
                       ),
                       onPressed: _sendMessage,
@@ -546,10 +616,36 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   }
 
   String _formatTime(DateTime dt) {
-    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    final local = dt.toLocal();
+    final hour = local.hour > 12
+        ? local.hour - 12
+        : (local.hour == 0 ? 12 : local.hour);
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
+  }
+
+  Widget _buildMessageItem(
+    MessageResponse message,
+    String timestamp, {
+    required bool isOutgoing,
+  }) {
+    return Column(
+      crossAxisAlignment:
+          isOutgoing ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        if (message.referencedListingId != null) ...[
+          _buildInlineReferencedListingCard(
+            message.referencedListingId!,
+            isOutgoing: isOutgoing,
+          ),
+          const SizedBox(height: 8),
+        ],
+        isOutgoing
+            ? _buildOutgoingMessage(message.body, timestamp)
+            : _buildIncomingMessage(message.body, timestamp),
+      ],
+    );
   }
 
   Widget _buildIncomingMessage(String message, String timestamp) {
@@ -563,14 +659,14 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.white,
+                  color: AppColors.of(context).white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.lightGray),
+                  border: Border.all(color: AppColors.of(context).lightGray),
                 ),
                 child: Text(
                   message,
-                  style: const TextStyle(
-                    color: AppColors.darkGray,
+                  style: TextStyle(
+                    color: AppColors.of(context).darkGray,
                     fontSize: 14,
                   ),
                 ),
@@ -578,8 +674,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 4),
               Text(
                 timestamp,
-                style: const TextStyle(
-                  color: AppColors.mediumGray,
+                style: TextStyle(
+                  color: AppColors.of(context).mediumGray,
                   fontSize: 11,
                 ),
               ),
@@ -593,9 +689,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
 
   Widget _buildOutgoingMessage(
     String message,
-    String timestamp, {
-    bool isDelivered = false,
-  }) {
+    String timestamp,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -606,12 +701,12 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.black,
+                  color: AppColors.of(context).primary,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   message,
-                  style: TextStyle(color: AppColors.white, fontSize: 14),
+                  style: TextStyle(color: AppColors.of(context).white, fontSize: 14),
                 ),
               ),
               const SizedBox(height: 4),
@@ -620,12 +715,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 children: [
                   Text(
                     timestamp,
-                    style: TextStyle(color: AppColors.mediumGray, fontSize: 11),
+                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 11),
                   ),
-                  if (isDelivered) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.done_all, size: 14, color: AppColors.mediumGray),
-                  ],
                 ],
               ),
             ],
@@ -645,13 +736,13 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             Icon(
               Icons.chat_bubble_outline,
               size: 64,
-              color: AppColors.mediumGray.withValues(alpha: 0.5),
+              color: AppColors.of(context).mediumGray.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'Start a conversation with ${widget.userName}',
               style: TextStyle(
-                color: AppColors.darkGray,
+                color: AppColors.of(context).darkGray,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -661,7 +752,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 8),
               Text(
                 widget.businessName!,
-                style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
+                style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -669,7 +760,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 4),
               Text(
                 widget.phoneNumber!,
-                style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
+                style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -679,83 +770,100 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     );
   }
 
-  Widget _buildProductReferenceCard() {
-    return GestureDetector(
-      onTap: widget.productListingId != null
-          ? () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProductDetailsScreen(
-                  listingId: widget.productListingId,
-                  productTitle: _productTitle!,
-                  price: _productPrice ?? 0,
-                  imageUrl: _productImageUrl,
-                  vendorName: widget.userName,
-                  vendorAvatar: _effectiveAvatarUrl,
-                  vendorLocation: '',
-                  ownerUserIdHint: widget.counterpartUserId,
-                ),
-              ),
-            )
-          : null,
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.lightGray, width: 1),
+  Widget _buildInlineReferencedListingCard(
+    int listingId, {
+    required bool isOutgoing,
+  }) {
+    final preview = _referencedListingPreviews[listingId];
+    final fallbackTitle = listingId == widget.productListingId &&
+            widget.productTitle != null &&
+            widget.productTitle!.trim().isNotEmpty
+        ? widget.productTitle!.trim()
+        : 'Loading listing...';
+    final imageUrl = preview?.imageUrl;
+    final title = (preview?.title.trim().isNotEmpty == true)
+        ? preview!.title
+        : fallbackTitle;
+    final price = preview?.price ??
+        (listingId == widget.productListingId ? widget.productPrice : null);
+
+    return Align(
+      alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductDetailsScreen(
+              listingId: listingId,
+              productTitle: title,
+              price: price ?? 0,
+              imageUrl: imageUrl,
+              vendorName: widget.userName,
+              vendorAvatar: _effectiveAvatarUrl,
+              vendorLocation: '',
+              ownerUserIdHint: widget.counterpartUserId,
+            ),
+          ),
         ),
-        child: Row(
-          children: [
-            // Product Image
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
+        child: Container(
+          width: 260,
+          decoration: BoxDecoration(
+            color: AppColors.of(context).white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.of(context).lightGray, width: 1),
+          ),
+          child: Row(
+            children: [
+              // Product Image
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                ),
+                child: imageUrl != null && imageUrl.trim().isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                      )
+                    : _imagePlaceholder(),
               ),
-              child: _productImageUrl != null
-                  ? Image.network(
-                      _productImageUrl!,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
-                    )
-                  : _imagePlaceholder(),
-            ),
-            // Product Details
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _productTitle!,
-                      style: const TextStyle(
-                        color: AppColors.darkGray,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (_productPrice != null) ...[
-                      const SizedBox(height: 4),
+              // Product Details
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'UGX ${_productPrice!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
-                        style: const TextStyle(
-                          color: AppColors.teal,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        title,
+                        style: TextStyle(
+                          color: AppColors.of(context).darkGray,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (price != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'UGX ${price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+                          style: TextStyle(
+                            color: AppColors.of(context).primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -765,10 +873,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     return Container(
       width: 80,
       height: 80,
-      color: AppColors.lightGray,
-      child: const Icon(
+      color: AppColors.of(context).lightGray,
+      child: Icon(
         Icons.image_not_supported_outlined,
-        color: AppColors.mediumGray,
+        color: AppColors.of(context).mediumGray,
         size: 32,
       ),
     );

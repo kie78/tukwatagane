@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
 import 'main.dart';
@@ -9,6 +10,7 @@ import 'inbox.dart';
 import 'saved.dart';
 
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
 import 'core/conversation_service.dart';
@@ -62,7 +64,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
           .map((e) => e['id'] as int)
           .toSet();
       if (mounted) setState(() => _bookmarkedIds = ids);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrowseScreen._loadBookmarkedIds] Failed: $e');
+      }
+    }
   }
 
   Future<void> _bootstrapUnread() async {
@@ -78,7 +84,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
       unreadNotifier.value = await unreadService.refreshUnreadCount(
         fallbackCount: fallback,
       );
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrowseScreen._bootstrapUnread] Failed: $e');
+      }
+    }
   }
 
   Future<void> _loadFeed() async {
@@ -102,7 +112,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
           lat = regLat;
           lng = regLng;
         }
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[BrowseScreen._loadFeed] Profile bootstrap failed: $e');
+        }
+      }
 
       final resp = await apiClient.dio.get(
         '/listings/feed',
@@ -143,13 +157,15 @@ class _BrowseScreenState extends State<BrowseScreen> {
           _myAvatarUrl = myAvatarUrl;
         });
       }
-    } on DioException catch (_) {
-      // silently keep empty list on error
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrowseScreen._loadFeed] Feed request failed: $e');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
     publicProfileCache.logDebugStats('BrowseScreen._loadFeed');
-    _loadBookmarkedIds();
+    await _loadBookmarkedIds();
   }
 
   String _timeAgo(DateTime dt) {
@@ -162,7 +178,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -171,19 +187,19 @@ class _BrowseScreenState extends State<BrowseScreen> {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -205,7 +221,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
               },
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: AppColors.darkGray,
+                backgroundColor: AppColors.of(context).darkGray,
                 backgroundImage: _myAvatarUrl != null
                     ? NetworkImage(_myAvatarUrl!)
                     : null,
@@ -214,8 +230,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
                         (_myFullName?.trim().isNotEmpty == true)
                             ? _myFullName!.trim()[0].toUpperCase()
                             : '?',
-                        style: const TextStyle(
-                          color: AppColors.white,
+                        style: TextStyle(
+                          color: AppColors.of(context).white,
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -227,27 +243,33 @@ class _BrowseScreenState extends State<BrowseScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? SkeletonShimmer(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                itemCount: 3,
+                itemBuilder: (_, __) => const ProductCardSkeleton(),
+              ),
+            )
           : _listings.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.storefront_outlined,
                     size: 64,
-                    color: AppColors.mediumGray,
+                    color: AppColors.of(context).mediumGray,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
+                  SizedBox(height: 16),
+                  Text(
                     'No listings yet',
-                    style: TextStyle(color: AppColors.mediumGray),
+                    style: TextStyle(color: AppColors.of(context).mediumGray),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: _loadFeed,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh'),
+                    icon: Icon(Icons.refresh),
+                    label: Text('Refresh'),
                   ),
                 ],
               ),
@@ -255,6 +277,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           : RefreshIndicator(
               onRefresh: _loadFeed,
               child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 itemCount: _listings.length,
                 itemBuilder: (context, index) {
                   final item = _listings[index];
@@ -381,7 +404,10 @@ class _ProductCardState extends State<ProductCard> {
           _isBookmarked ? 'Added to saved items' : 'Removed from saved items',
         );
       }
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProductCard._toggleBookmark] Failed: $e');
+      }
       // Revert on failure
       if (mounted) {
         setState(() => _isBookmarked = !_isBookmarked);
@@ -442,7 +468,7 @@ Check out this item on Tukwatagane!
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.of(context).white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -482,36 +508,36 @@ Check out this item on Tukwatagane!
                           )
                         : CircleAvatar(
                             radius: 20,
-                            backgroundColor: AppColors.darkGray,
+                            backgroundColor: AppColors.of(context).darkGray,
                             child: Text(
                               widget.sellerName.isNotEmpty
                                   ? widget.sellerName[0].toUpperCase()
                                   : '?',
-                              style: const TextStyle(
-                                color: AppColors.white,
+                              style: TextStyle(
+                                color: AppColors.of(context).white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                               ),
                             ),
                           ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           widget.sellerName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: AppColors.darkGray,
+                            color: AppColors.of(context).darkGray,
                             fontSize: 14,
                           ),
                         ),
                         Text(
                           widget.timestamp,
-                          style: const TextStyle(
-                            color: AppColors.mediumGray,
+                          style: TextStyle(
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 12,
                           ),
                         ),
@@ -537,11 +563,11 @@ Check out this item on Tukwatagane!
                             errorBuilder: (_, __, ___) => Container(
                               height: 250,
                               width: double.infinity,
-                              color: AppColors.lightGray,
-                              child: const Center(
+                              color: AppColors.of(context).lightGray,
+                              child: Center(
                                 child: Icon(
                                   Icons.image_not_supported_outlined,
-                                  color: AppColors.mediumGray,
+                                  color: AppColors.of(context).mediumGray,
                                   size: 64,
                                 ),
                               ),
@@ -551,13 +577,13 @@ Check out this item on Tukwatagane!
                             height: 250,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: AppColors.lightGray,
+                              color: AppColors.of(context).lightGray,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Center(
+                            child: Center(
                               child: Icon(
                                 Icons.image_not_supported_outlined,
-                                color: AppColors.mediumGray,
+                                color: AppColors.of(context).mediumGray,
                                 size: 64,
                               ),
                             ),
@@ -573,13 +599,13 @@ Check out this item on Tukwatagane!
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.darkGray.withValues(alpha: 0.8),
+                          color: AppColors.of(context).darkGray.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
+                        child: Text(
                           'New',
                           style: TextStyle(
-                            color: AppColors.white,
+                            color: AppColors.of(context).white,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -597,40 +623,40 @@ Check out this item on Tukwatagane!
                 children: [
                   Text(
                     widget.productTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontSize: 18,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     'UGX ${widget.price}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.teal,
+                      color: AppColors.of(context).primary,
                       fontSize: 20,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.location_on,
-                        color: AppColors.teal,
+                        color: AppColors.of(context).primary,
                         size: 16,
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
                         widget.location,
-                        style: const TextStyle(
-                          color: AppColors.mediumGray,
+                        style: TextStyle(
+                          color: AppColors.of(context).mediumGray,
                           fontSize: 14,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   // Action Buttons
                   if (!_isOwnListing)
                     Row(
@@ -669,20 +695,27 @@ Check out this item on Tukwatagane!
                                         widget.price.replaceAll(',', ''),
                                       ),
                                       productListingId: widget.listingId,
+                                      armProductReferenceOnOpen: true,
                                     ),
                                   ),
                                 );
-                              } catch (_) {}
+                              } catch (e) {
+                                if (kDebugMode) {
+                                  debugPrint(
+                                    '[ProductCard.onMessageTap] Failed: $e',
+                                  );
+                                }
+                              }
                             },
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.message,
                               size: 18,
-                              color: AppColors.white,
+                              color: AppColors.of(context).white,
                             ),
-                            label: const Text('Message'),
+                            label: Text('Message'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.teal,
-                              foregroundColor: AppColors.white,
+                              backgroundColor: AppColors.of(context).primary,
+                              foregroundColor: AppColors.of(context).white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -690,24 +723,24 @@ Check out this item on Tukwatagane!
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Container(
                           decoration: BoxDecoration(
-                            color: AppColors.lightGray,
+                            color: AppColors.of(context).lightGray,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.share,
-                              color: AppColors.darkGray,
+                              color: AppColors.of(context).darkGray,
                             ),
                             onPressed: _shareProduct,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Container(
                           decoration: BoxDecoration(
-                            color: AppColors.lightGray,
+                            color: AppColors.of(context).lightGray,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: IconButton(
@@ -716,8 +749,8 @@ Check out this item on Tukwatagane!
                                   ? Icons.bookmark
                                   : Icons.bookmark_border,
                               color: _isBookmarked
-                                  ? Colors.black
-                                  : AppColors.darkGray,
+                                  ? AppColors.of(context).primary
+                                  : AppColors.of(context).darkGray,
                             ),
                             onPressed: _toggleBookmark,
                           ),

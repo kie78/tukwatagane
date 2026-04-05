@@ -187,14 +187,14 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
                     const Divider(height: 1, indent: 44),
                 itemBuilder: (_, index) => ListTile(
                   dense: true,
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.location_on_outlined,
                     size: 18,
                     color: Colors.grey,
                   ),
                   title: Text(
                     _suggestions[index].description,
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(fontSize: 13),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

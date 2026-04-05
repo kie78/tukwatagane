@@ -81,15 +81,16 @@ class UnreadService {
     }
 
     final inFlight = _inFlightFetch;
-    if (inFlight != null) {
+    if (!forceRefresh && inFlight != null) {
       final count = await inFlight;
       return count ?? _lastKnownCount ?? fallbackCount;
     }
 
-    _inFlightFetch = _fetchAndCache();
+    final fetchFuture = _fetchAndCache();
+    _inFlightFetch = fetchFuture;
 
     try {
-      final count = await _inFlightFetch;
+      final count = await fetchFuture;
       if (count != null) return count;
     } catch (_) {}
 

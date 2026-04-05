@@ -5,6 +5,7 @@ import 'categoryListings.dart';
 import 'searchResults.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'models/models.dart';
 
@@ -87,7 +88,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -100,19 +101,19 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -136,25 +137,25 @@ class _SearchScreenState extends State<SearchScreen> {
                 onSubmitted: (value) => _performSearch(),
                 decoration: InputDecoration(
                   hintText: 'Search for products...',
-                  hintStyle: const TextStyle(color: AppColors.mediumGray),
-                  prefixIcon: const Icon(Icons.search, color: AppColors.mediumGray),
+                  hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
+                  prefixIcon: Icon(Icons.search, color: AppColors.of(context).mediumGray),
                   suffixIcon: IconButton(
-                    icon: const Icon(Icons.send, color: AppColors.teal),
+                    icon: Icon(Icons.send, color: AppColors.of(context).primary),
                     onPressed: _performSearch,
                   ),
                   filled: true,
-                  fillColor: AppColors.white,
+                  fillColor: AppColors.of(context).white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.teal),
+                    borderSide: BorderSide(color: AppColors.of(context).primary),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -171,7 +172,7 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Text(
                 'Discover by Category',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                 ),
@@ -182,10 +183,21 @@ class _SearchScreenState extends State<SearchScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             sliver: _isLoadingCategories
-                ? const SliverToBoxAdapter(
-                    child: Center(
-                      heightFactor: 4,
-                      child: CircularProgressIndicator(),
+                ? SliverToBoxAdapter(
+                    child: SkeletonShimmer(
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.85,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: 6,
+                        itemBuilder: (_, __) => const CategoryCardSkeleton(),
+                      ),
                     ),
                   )
                 : SliverGrid(
@@ -219,7 +231,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         itemCount: '${cat.activeListingCount} Items',
                         imageUrl: imgUrl,
                         badge: cat.badge,
-                        badgeColor: cat.badge == 'HOT' ? AppColors.teal : Colors.white,
+                        badgeColor: cat.badge == 'HOT' ? AppColors.of(context).primary : Colors.white,
                         badgeTextColor: const Color(0xFF2D3748),
                         highlightCount: cat.activeListingCount > 50,
                       ),
@@ -290,13 +302,13 @@ class CategoryCard extends StatelessWidget {
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
-                        color: AppColors.mediumGray,
-                        child: const Icon(Icons.image, color: Colors.white, size: 48),
+                        color: AppColors.of(context).mediumGray,
+                        child: Icon(Icons.image, color: Colors.white, size: 48),
                       );
                     },
                   )
                 : Container(
-                    color: AppColors.mediumGray,
+                    color: AppColors.of(context).mediumGray,
                     child: const Center(
                       child: Icon(Icons.category_outlined, color: Colors.white, size: 48),
                     ),
@@ -327,7 +339,7 @@ class CategoryCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: category.badgeColor ?? AppColors.teal,
+                    color: category.badgeColor ?? AppColors.of(context).primary,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -366,7 +378,7 @@ class CategoryCard extends StatelessWidget {
                       category.itemCount,
                       style: TextStyle(
                         color: category.highlightCount
-                            ? AppColors.teal
+                            ? AppColors.of(context).primary
                             : Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,

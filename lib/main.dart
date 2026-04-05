@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'login.dart';
 import 'browse.dart';
 import 'core/auth_service.dart';
@@ -20,6 +21,7 @@ final ValueNotifier<int> conversationUpdateNotifier = ValueNotifier(0);
 final ValueNotifier<int> bookmarkUpdateNotifier = ValueNotifier(0);
 final ValueNotifier<int?> openConversationNotifier = ValueNotifier<int?>(null);
 final ValueNotifier<int> conversationReadStateNotifier = ValueNotifier(0);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
 
 /// Per-conversation last-visit timestamp. Seeded on first chat-list load.
 /// Updated whenever the user opens an inbox screen.
@@ -29,20 +31,96 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
+const _themeStorageKey = 'theme_mode';
+
+Future<void> setThemeMode(ThemeMode mode) async {
+  themeModeNotifier.value = mode;
+  const storage = FlutterSecureStorage();
+  await storage.write(
+    key: _themeStorageKey,
+    value: mode == ThemeMode.dark ? 'dark' : 'light',
+  );
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
+  const storage = FlutterSecureStorage();
+  final savedTheme = await storage.read(key: _themeStorageKey);
+  if (savedTheme == 'dark') themeModeNotifier.value = ThemeMode.dark;
   final loggedIn = await authService.isLoggedIn();
   runApp(MainApp(startLoggedIn: loggedIn));
 }
 
 // App Theme Colors
+@immutable
+class AppThemeColors extends ThemeExtension<AppThemeColors> {
+  const AppThemeColors({
+    required this.primary,
+    required this.darkGray,
+    required this.mediumGray,
+    required this.lightGray,
+    required this.white,
+  });
+
+  final Color primary;
+  final Color darkGray;
+  final Color mediumGray;
+  final Color lightGray;
+  final Color white;
+
+  static const light = AppThemeColors(
+    primary: Color(0xFF000000),
+    darkGray: Color(0xFF2D3748),
+    mediumGray: Color(0xFF718096),
+    lightGray: Color(0xFFE2E8F0),
+    white: Color(0xFFFFFFFF),
+  );
+
+  static const dark = AppThemeColors(
+    primary: Color(0xFFFFFFFF),
+    darkGray: Color(0xFFE2E8F0),
+    mediumGray: Color(0xFF718096),
+    lightGray: Color(0xFF1A202C),
+    white: Color(0xFF2D3748),
+  );
+
+  static AppThemeColors of(BuildContext context) =>
+      Theme.of(context).extension<AppThemeColors>()!;
+
+  @override
+  AppThemeColors copyWith({
+    Color? primary,
+    Color? darkGray,
+    Color? mediumGray,
+    Color? lightGray,
+    Color? white,
+  }) {
+    return AppThemeColors(
+      primary: primary ?? this.primary,
+      darkGray: darkGray ?? this.darkGray,
+      mediumGray: mediumGray ?? this.mediumGray,
+      lightGray: lightGray ?? this.lightGray,
+      white: white ?? this.white,
+    );
+  }
+
+  @override
+  AppThemeColors lerp(AppThemeColors? other, double t) {
+    if (other == null) return this;
+    return AppThemeColors(
+      primary: Color.lerp(primary, other.primary, t)!,
+      darkGray: Color.lerp(darkGray, other.darkGray, t)!,
+      mediumGray: Color.lerp(mediumGray, other.mediumGray, t)!,
+      lightGray: Color.lerp(lightGray, other.lightGray, t)!,
+      white: Color.lerp(white, other.white, t)!,
+    );
+  }
+}
+
 class AppColors {
-  static const teal = Color(0xFF000000); // Black
-  static const darkGray = Color(0xFF2D3748);
-  static const mediumGray = Color(0xFF718096);
-  static const lightGray = Color(0xFFE2E8F0);
-  static const white = Color(0xFFFFFFFF);
+  static AppThemeColors of(BuildContext context) =>
+      AppThemeColors.of(context);
 }
 
 class MainApp extends StatefulWidget {
@@ -56,9 +134,41 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   static const Duration _pollInterval = Duration(seconds: 8);
 
+  static final _lightTheme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: AppThemeColors.light.primary,
+      primary: AppThemeColors.light.primary,
+    ),
+    scaffoldBackgroundColor: AppThemeColors.light.lightGray,
+    appBarTheme: AppBarTheme(
+      backgroundColor: AppThemeColors.light.white,
+      elevation: 0,
+    ),
+    extensions: const [AppThemeColors.light],
+    useMaterial3: true,
+  );
+
+  static final _darkTheme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: AppThemeColors.dark.primary,
+      primary: AppThemeColors.dark.primary,
+      brightness: Brightness.dark,
+    ),
+    scaffoldBackgroundColor: AppThemeColors.dark.lightGray,
+    appBarTheme: AppBarTheme(
+      backgroundColor: AppThemeColors.dark.white,
+      elevation: 0,
+    ),
+    extensions: const [AppThemeColors.dark],
+    useMaterial3: true,
+  );
+  static const Duration _popupDuration = Duration(seconds: 4);
+
   Timer? _unreadPollTimer;
+  Timer? _popupDismissTimer;
   bool _pollingUnread = false;
   int? _lastUnreadCount;
+  OverlayEntry? _messagePopupEntry;
 
   @override
   void initState() {
@@ -79,6 +189,8 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     messageRealtimeService.incomingMessageNotifier.removeListener(
       _handleIncomingMessageNotification,
     );
+    _popupDismissTimer?.cancel();
+    _removeMessagePopup();
     messageRealtimeService.stop();
     _unreadPollTimer?.cancel();
     super.dispose();
@@ -105,55 +217,10 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     if (incoming == null) return;
     if (openConversationNotifier.value == incoming.conversationId) return;
 
-    final messenger = appScaffoldMessengerKey.currentState;
-    messenger?.hideCurrentSnackBar();
-    messenger?.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.teal,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        content: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            messenger.hideCurrentSnackBar();
-            _openChatFromNotification();
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.message_outlined,
-                color: AppColors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  incoming.message.body,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Open',
-                style: TextStyle(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    _showTopMessagePopup(
+      senderName: incoming.senderName,
+      senderAvatarUrl: incoming.senderAvatarUrl,
+      messageText: incoming.message.body,
     );
   }
 
@@ -188,53 +255,10 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         final text = delta == 1
             ? 'You have a new message'
             : 'You have $delta new messages';
-        final messenger = appScaffoldMessengerKey.currentState;
-        messenger?.hideCurrentSnackBar();
-        messenger?.showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.teal,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            content: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                messenger.hideCurrentSnackBar();
-                _openChatFromNotification();
-              },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.message_outlined,
-                    color: AppColors.white,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      text,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Open',
-                    style: TextStyle(
-                      color: AppColors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        _showTopMessagePopup(
+          senderName: 'Messages',
+          senderAvatarUrl: null,
+          messageText: text,
         );
       }
     } catch (_) {
@@ -244,40 +268,146 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   }
 
   void _openChatFromNotification() {
+    _removeMessagePopup();
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) return;
 
     navigator.pushNamed('/chat');
   }
 
+  void _showTopMessagePopup({
+    required String senderName,
+    required String? senderAvatarUrl,
+    required String messageText,
+  }) {
+    final navigator = appNavigatorKey.currentState;
+    final overlay = navigator?.overlay;
+    if (overlay == null) return;
+
+    _popupDismissTimer?.cancel();
+    _removeMessagePopup();
+
+    _messagePopupEntry = OverlayEntry(
+      builder: (context) {
+        final c = AppColors.of(context);
+        final topPadding = MediaQuery.of(context).padding.top;
+        return Positioned(
+          top: topPadding + 12,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openChatFromNotification,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: c.primary,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    (senderAvatarUrl?.trim().isNotEmpty == true)
+                        ? CircleAvatar(
+                            radius: 18,
+                            backgroundImage: NetworkImage(senderAvatarUrl!),
+                            backgroundColor: c.white,
+                          )
+                        : CircleAvatar(
+                            radius: 18,
+                            backgroundColor: c.white,
+                            child: Text(
+                              senderName.trim().isNotEmpty
+                                  ? senderName.trim()[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: c.darkGray,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            senderName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            messageText,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(_messagePopupEntry!);
+    _popupDismissTimer = Timer(_popupDuration, _removeMessagePopup);
+  }
+
+  void _removeMessagePopup() {
+    _messagePopupEntry?.remove();
+    _messagePopupEntry = null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Tukwatagane',
-      debugShowCheckedModeBanner: false,
-      navigatorKey: appNavigatorKey,
-      scaffoldMessengerKey: appScaffoldMessengerKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.teal,
-          primary: AppColors.teal,
-        ),
-        scaffoldBackgroundColor: AppColors.lightGray,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.white,
-          elevation: 0,
-        ),
-        useMaterial3: true,
+    return ListenableBuilder(
+      listenable: themeModeNotifier,
+      builder: (_, __) => MaterialApp(
+        title: 'Tukwatagane',
+        debugShowCheckedModeBanner: false,
+        navigatorKey: appNavigatorKey,
+        scaffoldMessengerKey: appScaffoldMessengerKey,
+        themeMode: themeModeNotifier.value,
+        theme: _lightTheme,
+        darkTheme: _darkTheme,
+        navigatorObservers: [routeObserver],
+        home: widget.startLoggedIn ? const BrowseScreen() : const LoginScreen(),
+        routes: {
+          '/browse': (_) => const BrowseScreen(),
+          '/search': (_) => const SearchScreen(),
+          '/sell': (_) => const SellScreen(),
+          '/chat': (_) => const ChatScreen(),
+          '/account': (_) => const AccountScreen(),
+        },
       ),
-      navigatorObservers: [routeObserver],
-      home: widget.startLoggedIn ? const BrowseScreen() : const LoginScreen(),
-      routes: {
-        '/browse': (_) => const BrowseScreen(),
-        '/search': (_) => const SearchScreen(),
-        '/sell': (_) => const SellScreen(),
-        '/chat': (_) => const ChatScreen(),
-        '/account': (_) => const AccountScreen(),
-      },
     );
   }
 }

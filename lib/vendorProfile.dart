@@ -6,6 +6,7 @@ import 'core/api_client.dart';
 import 'core/auth_service.dart';
 import 'core/conversation_service.dart';
 import 'core/public_profile_cache.dart';
+import 'widgets/skeletons.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
 
@@ -459,19 +460,19 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     final activeCount = _profile?.activeListingsCount;
 
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: IconButton(
           icon: CircleAvatar(
-            backgroundColor: AppColors.lightGray,
-            child: Icon(Icons.arrow_back, color: AppColors.darkGray),
+            backgroundColor: AppColors.of(context).lightGray,
+            child: Icon(Icons.arrow_back, color: AppColors.of(context).darkGray),
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Vendor Profile',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
@@ -494,7 +495,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                           children: [
                             CircleAvatar(
                               radius: 60,
-                              backgroundColor: AppColors.darkGray,
+                              backgroundColor: AppColors.of(context).darkGray,
                               backgroundImage: vendorAvatarUrl != null
                                   ? NetworkImage(vendorAvatarUrl)
                                         as ImageProvider
@@ -504,8 +505,8 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                                       widget.vendorName.isNotEmpty
                                           ? widget.vendorName[0].toUpperCase()
                                           : '?',
-                                      style: const TextStyle(
-                                        color: AppColors.white,
+                                      style: TextStyle(
+                                        color: AppColors.of(context).white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 40,
                                       ),
@@ -523,7 +524,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                                     color: Colors.green,
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: AppColors.white,
+                                      color: AppColors.of(context).white,
                                       width: 3,
                                     ),
                                   ),
@@ -535,7 +536,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         Text(
                           _displayVendorName,
                           style: TextStyle(
-                            color: AppColors.darkGray,
+                            color: AppColors.of(context).darkGray,
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
                           ),
@@ -581,21 +582,28 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                   Text(
                     'Items for Sale',
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 16),
                   if (_loadingListings)
-                    const Center(child: CircularProgressIndicator())
+                    SkeletonShimmer(
+                      child: Column(
+                        children: List.generate(
+                          3,
+                          (_) => const VendorListingTileSkeleton(),
+                        ),
+                      ),
+                    )
                   else if (_listings.isEmpty)
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Text(
                           'No active listings',
-                          style: TextStyle(color: AppColors.mediumGray),
+                          style: TextStyle(color: AppColors.of(context).mediumGray),
                         ),
                       ),
                     )
@@ -643,14 +651,15 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                                 _resolvedVendorUserId ??
                                 openResult.counterpartUserId,
                             productListingId: id,
+                            armProductReferenceOnOpen: true,
                           ),
                         ),
                       );
                     } catch (_) {}
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.teal,
-                    foregroundColor: AppColors.white,
+                    backgroundColor: AppColors.of(context).primary,
+                    foregroundColor: AppColors.of(context).white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
@@ -659,7 +668,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                   ),
                   icon: Icon(
                     Icons.chat_bubble_outline,
-                    color: AppColors.white,
+                    color: AppColors.of(context).white,
                     size: 20,
                   ),
                   label: Text(
@@ -683,7 +692,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: AppColors.of(context).white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -698,10 +707,10 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.lightGray,
+              color: AppColors.of(context).lightGray,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: AppColors.mediumGray, size: 24),
+            child: Icon(icon, color: AppColors.of(context).mediumGray, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -711,7 +720,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -719,7 +728,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(color: AppColors.mediumGray, fontSize: 13),
+                  style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 13),
                 ),
               ],
             ),
@@ -728,10 +737,10 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.teal,
+                color: AppColors.of(context).primary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.check, color: AppColors.white, size: 16),
+              child: Icon(Icons.check, color: AppColors.of(context).white, size: 16),
             ),
         ],
       ),
@@ -766,7 +775,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.white,
+            color: AppColors.of(context).white,
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -798,7 +807,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                     Text(
                       listing.title,
                       style: TextStyle(
-                        color: AppColors.darkGray,
+                        color: AppColors.of(context).darkGray,
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
@@ -812,7 +821,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         Text(
                           'UGX ${listing.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                           style: TextStyle(
-                            color: AppColors.teal,
+                            color: AppColors.of(context).primary,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -852,12 +861,12 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
       width: 70,
       height: 70,
       decoration: BoxDecoration(
-        color: AppColors.lightGray,
+        color: AppColors.of(context).lightGray,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Icon(
         Icons.image_not_supported,
-        color: AppColors.mediumGray,
+        color: AppColors.of(context).mediumGray,
         size: 28,
       ),
     );

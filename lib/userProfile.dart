@@ -5,6 +5,7 @@ import 'dart:io';
 import 'main.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'core/ui/app_toast.dart';
 import 'models/models.dart';
@@ -176,30 +177,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const UserProfileSkeleton();
     }
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).darkGray),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -220,7 +221,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Text(
                 'Profile',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                 ),
@@ -235,11 +236,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.lightGray, width: 3),
+                      border: Border.all(color: AppColors.of(context).lightGray, width: 3),
                     ),
                     child: CircleAvatar(
                       radius: 58,
-                      backgroundColor: AppColors.darkGray,
+                      backgroundColor: AppColors.of(context).darkGray,
                       backgroundImage: _profileImage != null
                           ? FileImage(File(_profileImage!.path))
                                 as ImageProvider
@@ -248,8 +249,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                       as ImageProvider
                                 : null),
                       child: _isUploadingAvatar
-                          ? const CircularProgressIndicator(
-                              color: AppColors.white,
+                          ? CircularProgressIndicator(
+                              color: AppColors.of(context).white,
                               strokeWidth: 3,
                             )
                           : (_profileImage == null &&
@@ -258,8 +259,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     (_profile?.fullName.isNotEmpty == true)
                                         ? _profile!.fullName[0].toUpperCase()
                                         : '?',
-                                    style: const TextStyle(
-                                      color: AppColors.white,
+                                    style: TextStyle(
+                                      color: AppColors.of(context).white,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 40,
                                     ),
@@ -274,14 +275,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: AppColors.of(context).primary,
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(
                         padding: EdgeInsets.zero,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.edit,
-                          color: AppColors.white,
+                          color: AppColors.of(context).white,
                           size: 18,
                         ),
                         onPressed: _pickProfileImage,
@@ -291,7 +292,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             // Name & Status
             Center(
               child: Column(
@@ -299,20 +300,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   Text(
                     _profile?.fullName ?? '—',
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 24,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     'Student Member',
-                    style: TextStyle(color: AppColors.mediumGray, fontSize: 16),
+                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 16),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
             // Student Details Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -323,17 +324,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   Text(
                     'Account Information',
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   // Locked Credentials Card
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: AppColors.white,
+                      color: AppColors.of(context).white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -351,20 +352,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           Text(
                             'STUDENT DETAILS',
                             style: TextStyle(
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           // REG NO Field
                           _buildLockedField(
                             label: 'REG NO',
                             value: _profile?.registrationNumber ?? '—',
                             prefixIcon: Icons.badge,
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           // EMAIL Field
                           _buildLockedField(
                             label: 'EMAIL',
@@ -375,12 +376,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   // Personal Information Card
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: AppColors.white,
+                      color: AppColors.of(context).white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -398,27 +399,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           Text(
                             'PERSONAL INFORMATION',
                             style: TextStyle(
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           // NAME Field
                           _buildLockedField(
                             label: 'NAME',
                             value: _profile?.fullName ?? '—',
                             prefixIcon: Icons.person,
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           // TEL Field
                           _buildLockedField(
                             label: 'TEL',
                             value: _profile?.phoneNumber ?? '—',
                             prefixIcon: Icons.phone,
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           // REGISTERED LOCATION Field
                           _buildLockedField(
                             label: 'REGISTERED LOCATION',
@@ -429,7 +430,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                 ],
               ),
             ),
@@ -451,12 +452,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         Text(
           label,
           style: TextStyle(
-            color: AppColors.mediumGray,
+            color: AppColors.of(context).mediumGray,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
@@ -465,15 +466,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           child: Row(
             children: [
-              Icon(prefixIcon, color: AppColors.mediumGray, size: 20),
-              const SizedBox(width: 12),
+              Icon(prefixIcon, color: AppColors.of(context).mediumGray, size: 20),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   value,
-                  style: TextStyle(color: AppColors.darkGray, fontSize: 15),
+                  style: TextStyle(color: AppColors.of(context).darkGray, fontSize: 15),
                 ),
               ),
-              Icon(Icons.lock, color: AppColors.mediumGray, size: 18),
+              Icon(Icons.lock, color: AppColors.of(context).mediumGray, size: 18),
             ],
           ),
         ),

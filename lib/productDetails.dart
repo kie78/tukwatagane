@@ -341,6 +341,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               productImage: widget.imageUrl,
               productPrice: widget.price,
               productListingId: widget.listingId,
+              armProductReferenceOnOpen: true,
             ),
           ),
         );
@@ -368,7 +369,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         : widget.vendorAvatar;
 
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       body: SafeArea(
         top: true,
         bottom: false,
@@ -387,12 +388,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         Container(
                           height: 400,
                           width: double.infinity,
-                          color: AppColors.lightGray,
-                          child: const Center(
+                          color: AppColors.of(context).lightGray,
+                          child: Center(
                             child: Icon(
                               Icons.image_not_supported_outlined,
                               size: 80,
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                             ),
                           ),
                         )
@@ -413,20 +414,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 fit: BoxFit.cover,
                                 width: double.infinity,
                                 errorBuilder: (_, __, ___) => Container(
-                                  color: AppColors.lightGray,
-                                  child: const Center(
+                                  color: AppColors.of(context).lightGray,
+                                  child: Center(
                                     child: Icon(
                                       Icons.image_not_supported_outlined,
                                       size: 80,
-                                      color: AppColors.mediumGray,
+                                      color: AppColors.of(context).mediumGray,
                                     ),
                                   ),
                                 ),
                                 loadingBuilder: (_, child, progress) {
                                   if (progress == null) return child;
                                   return Container(
-                                    color: AppColors.lightGray,
-                                    child: const Center(
+                                    color: AppColors.of(context).lightGray,
+                                    child: Center(
                                       child: CircularProgressIndicator(),
                                     ),
                                   );
@@ -449,7 +450,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                             child: Icon(
                               Icons.arrow_back,
-                              color: AppColors.darkGray,
+                              color: AppColors.of(context).darkGray,
                               size: 24,
                             ),
                           ),
@@ -474,8 +475,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: _currentImageIndex == index
-                                      ? AppColors.teal
-                                      : AppColors.lightGray,
+                                      ? AppColors.of(context).primary
+                                      : AppColors.of(context).lightGray,
                                 ),
                               ),
                             ),
@@ -488,7 +489,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     offset: const Offset(0, -24),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppColors.white,
+                        color: AppColors.of(context).white,
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(24),
                           topRight: Radius.circular(24),
@@ -503,15 +504,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             Text(
                               widget.productTitle,
                               style: TextStyle(
-                                color: AppColors.darkGray,
+                                color: AppColors.of(context).darkGray,
                                 fontSize: 28,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12),
                             if (_isListingLoading) ...[
                               const LinearProgressIndicator(),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                             ],
                             if (hasListingStatusMessage) ...[
                               Container(
@@ -540,7 +541,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           ? Colors.orange.shade700
                                           : Colors.red.shade700,
                                     ),
-                                    const SizedBox(width: 8),
+                                    SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         listingStatusMessage,
@@ -556,9 +557,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: 16),
                             ] else
-                              const SizedBox(height: 16),
+                              SizedBox(height: 16),
                             // Description
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,7 +569,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       ? descriptionText
                                       : 'No description provided.',
                                   style: TextStyle(
-                                    color: AppColors.mediumGray,
+                                    color: AppColors.of(context).mediumGray,
                                     fontSize: 15,
                                     height: 1.5,
                                   ),
@@ -584,7 +585,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       : null,
                                 ),
                                 if (shouldShowDescriptionToggle) ...[
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: 8),
                                   GestureDetector(
                                     onTap: () {
                                       setState(() {
@@ -597,7 +598,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           ? 'Show Less'
                                           : 'Read More',
                                       style: TextStyle(
-                                        color: AppColors.teal,
+                                        color: AppColors.of(context).primary,
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -606,7 +607,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ],
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24),
                             // Price and Bookmark Row
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -614,7 +615,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 Text(
                                   'UGX ${widget.price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                                   style: TextStyle(
-                                    color: AppColors.teal,
+                                    color: AppColors.of(context).primary,
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -627,15 +628,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: AppColors.white,
+                                        color: AppColors.of(context).white,
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: AppColors.lightGray,
+                                          color: AppColors.of(context).lightGray,
                                           width: 1,
                                         ),
                                       ),
                                       child: _isBookmarkLoading
-                                          ? const SizedBox(
+                                          ? SizedBox(
                                               width: 20,
                                               height: 20,
                                               child: CircularProgressIndicator(
@@ -647,15 +648,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                   ? Icons.bookmark
                                                   : Icons.bookmark_border,
                                               color: _isBookmarked
-                                                  ? AppColors.teal
-                                                  : AppColors.mediumGray,
+                                                  ? AppColors.of(context).primary
+                                                  : AppColors.of(context).mediumGray,
                                               size: 24,
                                             ),
                                     ),
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24),
                             // Vendor Information Card
                             GestureDetector(
                               onTap: () {
@@ -675,9 +676,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: AppColors.white,
+                                  color: AppColors.of(context).white,
                                   border: Border.all(
-                                    color: AppColors.lightGray,
+                                    color: AppColors.of(context).lightGray,
                                     width: 1,
                                   ),
                                   borderRadius: BorderRadius.circular(12),
@@ -697,14 +698,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             : CircleAvatar(
                                                 radius: 28,
                                                 backgroundColor:
-                                                    AppColors.darkGray,
+                                                    AppColors.of(context).darkGray,
                                                 child: Text(
                                                   widget.vendorName.isNotEmpty
                                                       ? widget.vendorName[0]
                                                             .toUpperCase()
                                                       : '?',
-                                                  style: const TextStyle(
-                                                    color: AppColors.white,
+                                                  style: TextStyle(
+                                                    color: AppColors.of(context).white,
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 18,
                                                   ),
@@ -717,7 +718,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             child: Container(
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
-                                                color: AppColors.white,
+                                                color: AppColors.of(context).white,
                                                 shape: BoxShape.circle,
                                               ),
                                               child: Icon(
@@ -729,7 +730,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           ),
                                       ],
                                     ),
-                                    const SizedBox(width: 12),
+                                    SizedBox(width: 12),
                                     // Vendor Info
                                     Expanded(
                                       child: Column(
@@ -739,24 +740,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           Text(
                                             widget.vendorName,
                                             style: TextStyle(
-                                              color: AppColors.darkGray,
+                                              color: AppColors.of(context).darkGray,
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
+                                          SizedBox(height: 4),
                                           Row(
                                             children: [
                                               Icon(
                                                 Icons.location_on,
                                                 size: 14,
-                                                color: AppColors.mediumGray,
+                                                color: AppColors.of(context).mediumGray,
                                               ),
-                                              const SizedBox(width: 4),
+                                              SizedBox(width: 4),
                                               Text(
                                                 widget.vendorLocation,
                                                 style: TextStyle(
-                                                  color: AppColors.mediumGray,
+                                                  color: AppColors.of(context).mediumGray,
                                                   fontSize: 13,
                                                 ),
                                               ),
@@ -785,11 +786,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               size: 14,
                                               color: Colors.amber.shade700,
                                             ),
-                                            const SizedBox(width: 4),
+                                            SizedBox(width: 4),
                                             Text(
                                               widget.vendorRating!.toString(),
                                               style: TextStyle(
-                                                color: AppColors.teal,
+                                                color: AppColors.of(context).primary,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -801,7 +802,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 100),
+                            SizedBox(height: 100),
                           ],
                         ),
                       ),
@@ -819,7 +820,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.white,
+                    color: AppColors.of(context).white,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),
@@ -831,8 +832,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _isChatLoading ? null : _startConversation,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.teal,
-                      foregroundColor: AppColors.white,
+                      backgroundColor: AppColors.of(context).primary,
+                      foregroundColor: AppColors.of(context).white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -840,20 +841,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       elevation: 0,
                     ),
                     icon: _isChatLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                              color: AppColors.white,
+                              color: AppColors.of(context).white,
                               strokeWidth: 2,
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.chat_bubble_outline,
-                            color: AppColors.white,
+                            color: AppColors.of(context).white,
                             size: 20,
                           ),
-                    label: const Text(
+                    label: Text(
                       'Message Vendor',
                       style: TextStyle(
                         fontSize: 16,

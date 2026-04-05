@@ -3,6 +3,7 @@ import 'main.dart';
 import 'productDetails.dart';
 import 'inbox.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'core/auth_service.dart';
 import 'core/conversation_service.dart';
@@ -249,20 +250,20 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text('Remove Saved Item'),
+          title: Text('Remove Saved Item'),
           content: Text('Remove "${item.title}" from saved items?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                foregroundColor: AppColors.white,
+                backgroundColor: AppColors.of(context).primary,
+                foregroundColor: AppColors.of(context).white,
               ),
-              child: const Text('Remove'),
+              child: Text('Remove'),
             ),
           ],
         );
@@ -313,6 +314,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
             productImage: item.primaryImageUrl,
             productPrice: item.priceUgx,
             productListingId: item.id,
+            armProductReferenceOnOpen: true,
           ),
         ),
       );
@@ -322,7 +324,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -331,19 +333,19 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {},
           ),
@@ -363,7 +365,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                   },
                   child: Icon(
                     Icons.arrow_back,
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     size: 28,
                   ),
                 ),
@@ -377,7 +379,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                       Text(
                         'Saved Items',
                         style: TextStyle(
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           fontSize: 32,
                           fontWeight: FontWeight.w900,
                         ),
@@ -385,7 +387,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                       Text(
                         '${_savedItems.length} items',
                         style: TextStyle(
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                           fontSize: 16,
                         ),
                       ),
@@ -398,7 +400,13 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           // Saved Items List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonShimmer(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      itemCount: 4,
+                      itemBuilder: (_, __) => const SavedCardSkeleton(),
+                    ),
+                  )
                 : _savedItems.isEmpty
                 ? Center(
                     child: Column(
@@ -407,13 +415,13 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         Icon(
                           Icons.bookmark_border,
                           size: 80,
-                          color: AppColors.mediumGray.withValues(alpha: 0.5),
+                          color: AppColors.of(context).mediumGray.withValues(alpha: 0.5),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'No Saved Items',
                           style: TextStyle(
-                            color: AppColors.darkGray,
+                            color: AppColors.of(context).darkGray,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -422,7 +430,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         Text(
                           'Items you bookmark will appear here',
                           style: TextStyle(
-                            color: AppColors.mediumGray,
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 14,
                           ),
                         ),
@@ -476,7 +484,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.of(context).white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -508,10 +516,10 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         : Container(
                             width: 100,
                             height: 100,
-                            color: AppColors.lightGray,
-                            child: const Icon(
+                            color: AppColors.of(context).lightGray,
+                            child: Icon(
                               Icons.image_not_supported_outlined,
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                               size: 36,
                             ),
                           ),
@@ -526,15 +534,15 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                           children: [
                             CircleAvatar(
                               radius: 10,
-                              backgroundColor: AppColors.lightGray,
+                              backgroundColor: AppColors.of(context).lightGray,
                               backgroundImage: sellerAvatar != null
                                   ? NetworkImage(sellerAvatar)
                                   : null,
                               child: sellerAvatar == null
                                   ? Text(
                                       sellerInitial,
-                                      style: const TextStyle(
-                                        color: AppColors.mediumGray,
+                                      style: TextStyle(
+                                        color: AppColors.of(context).mediumGray,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -545,8 +553,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                             Expanded(
                               child: Text(
                                 sellerName,
-                                style: const TextStyle(
-                                  color: AppColors.darkGray,
+                                style: TextStyle(
+                                  color: AppColors.of(context).darkGray,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -560,8 +568,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         // Title
                         Text(
                           item.title,
-                          style: const TextStyle(
-                            color: AppColors.darkGray,
+                          style: TextStyle(
+                            color: AppColors.of(context).darkGray,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -572,8 +580,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         // Price
                         Text(
                           'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
-                          style: const TextStyle(
-                            color: AppColors.teal,
+                          style: TextStyle(
+                            color: AppColors.of(context).primary,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -582,17 +590,17 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         // Location
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.location_on,
                               size: 14,
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                             ),
                             const SizedBox(width: 2),
                             Expanded(
                               child: Text(
                                 _resolvedLocation(item),
-                                style: const TextStyle(
-                                  color: AppColors.mediumGray,
+                                style: TextStyle(
+                                  color: AppColors.of(context).mediumGray,
                                   fontSize: 12,
                                 ),
                                 maxLines: 1,
@@ -615,8 +623,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                     child: OutlinedButton.icon(
                       onPressed: () => _confirmRemoveItem(item),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.mediumGray,
-                        side: BorderSide(color: AppColors.lightGray, width: 1),
+                        foregroundColor: AppColors.of(context).mediumGray,
+                        side: BorderSide(color: AppColors.of(context).lightGray, width: 1),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 8,
@@ -628,7 +636,7 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                       icon: Icon(
                         Icons.delete_outline,
                         size: 16,
-                        color: AppColors.mediumGray,
+                        color: AppColors.of(context).mediumGray,
                       ),
                       label: Text(
                         'Remove',
@@ -676,11 +684,11 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         onPressed: isAvailable ? () => _startChat(item) : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isAvailable
-                              ? AppColors.teal
-                              : AppColors.lightGray,
+                              ? AppColors.of(context).primary
+                              : AppColors.of(context).lightGray,
                           foregroundColor: isAvailable
-                              ? AppColors.white
-                              : AppColors.mediumGray,
+                              ? AppColors.of(context).white
+                              : AppColors.of(context).mediumGray,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 8,
@@ -694,8 +702,8 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                           Icons.chat_bubble_outline,
                           size: 16,
                           color: isAvailable
-                              ? AppColors.white
-                              : AppColors.mediumGray,
+                              ? AppColors.of(context).white
+                              : AppColors.of(context).mediumGray,
                         ),
                         label: Text(
                           'Chat Now',

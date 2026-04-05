@@ -45,7 +45,7 @@ class AppToast {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
 
-    final style = _styleFor(type);
+    final style = _styleFor(type, AppColors.of(context));
 
     messenger.showSnackBar(
       SnackBar(
@@ -75,30 +75,30 @@ class AppToast {
     );
   }
 
-  static _ToastStyle _styleFor(AppToastType type) {
+  static _ToastStyle _styleFor(AppToastType type, AppThemeColors c) {
     switch (type) {
       case AppToastType.success:
-        return const _ToastStyle(
-          background: AppColors.teal,
-          foreground: AppColors.white,
+        return _ToastStyle(
+          background: c.primary,
+          foreground: c.white,
           icon: Icons.check_circle_outline,
         );
       case AppToastType.error:
-        return const _ToastStyle(
-          background: AppColors.teal,
-          foreground: AppColors.white,
+        return _ToastStyle(
+          background: c.primary,
+          foreground: c.white,
           icon: Icons.error_outline,
         );
       case AppToastType.warning:
-        return const _ToastStyle(
-          background: AppColors.mediumGray,
-          foreground: AppColors.white,
+        return _ToastStyle(
+          background: c.mediumGray,
+          foreground: c.white,
           icon: Icons.warning_amber_rounded,
         );
       case AppToastType.info:
-        return const _ToastStyle(
-          background: AppColors.teal,
-          foreground: AppColors.white,
+        return _ToastStyle(
+          background: c.primary,
+          foreground: c.white,
           icon: Icons.info_outline,
         );
     }

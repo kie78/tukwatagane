@@ -506,6 +506,7 @@ class MessageResponse {
   final int conversationId;
   final int senderUserId;
   final String body;
+  final int? referencedListingId;
   final DateTime createdAt;
 
   const MessageResponse({
@@ -513,6 +514,7 @@ class MessageResponse {
     required this.conversationId,
     required this.senderUserId,
     required this.body,
+    this.referencedListingId,
     required this.createdAt,
   });
 
@@ -521,6 +523,7 @@ class MessageResponse {
     conversationId: j['conversationId'],
     senderUserId: j['senderUserId'],
     body: j['body'],
+    referencedListingId: j['referencedListingId'] as int?,
     createdAt: DateTime.parse(j['createdAt']),
   );
 }

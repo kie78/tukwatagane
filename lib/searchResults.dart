@@ -6,6 +6,7 @@ import 'main.dart';
 import 'saved.dart';
 import 'productDetails.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'core/api_exception.dart';
 import 'models/models.dart';
@@ -274,27 +275,27 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).darkGray),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
-        title: const Text(
+        title: Text(
           'Search Results',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -306,12 +307,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? SkeletonShimmer(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: 3,
+                itemBuilder: (_, __) => const ProductCardSkeleton(),
+              ),
+            )
           : _errorMessage != null
           ? Center(
               child: Text(
                 _errorMessage!,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: Colors.red),
               ),
             )
           : _listings.isEmpty
@@ -319,15 +326,15 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.search_off,
                     size: 64,
-                    color: AppColors.mediumGray,
+                    color: AppColors.of(context).mediumGray,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text(
                     'No results for "${widget.searchQuery}"',
-                    style: const TextStyle(color: AppColors.mediumGray),
+                    style: TextStyle(color: AppColors.of(context).mediumGray),
                   ),
                 ],
               ),
@@ -368,7 +375,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.white,
+                        color: AppColors.of(context).white,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -384,10 +391,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                     errorBuilder: (_, __, ___) => Container(
                                       width: 80,
                                       height: 80,
-                                      color: AppColors.lightGray,
-                                      child: const Icon(
+                                      color: AppColors.of(context).lightGray,
+                                      child: Icon(
                                         Icons.image_not_supported_outlined,
-                                        color: AppColors.mediumGray,
+                                        color: AppColors.of(context).mediumGray,
                                         size: 28,
                                       ),
                                     ),
@@ -395,35 +402,35 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                 : Container(
                                     width: 80,
                                     height: 80,
-                                    color: AppColors.lightGray,
-                                    child: const Icon(
+                                    color: AppColors.of(context).lightGray,
+                                    child: Icon(
                                       Icons.image_not_supported_outlined,
-                                      color: AppColors.mediumGray,
+                                      color: AppColors.of(context).mediumGray,
                                       size: 28,
                                     ),
                                   ),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   item.title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkGray,
+                                    color: AppColors.of(context).darkGray,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: 4),
                                 Text(
                                   'UGX ${item.priceUgx}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkGray,
+                                    color: AppColors.of(context).darkGray,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: 4),
                                 Text(
                                   zoneLabel(
                                     item.lat,
@@ -431,16 +438,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                     fallback:
                                         item.campus ?? item.locationText ?? '',
                                   ),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: AppColors.mediumGray,
+                                    color: AppColors.of(context).mediumGray,
                                   ),
                                 ),
                                 Text(
                                   _timeAgo(item.createdAt),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: AppColors.mediumGray,
+                                    color: AppColors.of(context).mediumGray,
                                   ),
                                 ),
                               ],
@@ -472,7 +479,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.darkGray,
+          color: AppColors.of(context).darkGray,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -487,14 +494,14 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           children: [
             Icon(
               _showMap ? Icons.list : Icons.map_outlined,
-              color: AppColors.white,
+              color: AppColors.of(context).white,
               size: 18,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               _showMap ? 'List View' : 'Map View',
-              style: const TextStyle(
-                color: AppColors.white,
+              style: TextStyle(
+                color: AppColors.of(context).white,
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
               ),
@@ -538,7 +545,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.white.withValues(alpha: 0.9),
+                  color: AppColors.of(context).white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -546,16 +553,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                   children: [
                     Text(
                       '${_listings.length} result${_listings.length == 1 ? '' : 's'} on map',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.mediumGray,
+                        color: AppColors.of(context).mediumGray,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Icon(
+                    SizedBox(width: 6),
+                    Icon(
                       Icons.expand_more,
                       size: 16,
-                      color: AppColors.mediumGray,
+                      color: AppColors.of(context).mediumGray,
                     ),
                   ],
                 ),
@@ -675,10 +682,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       constraints: const BoxConstraints(maxWidth: 420),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                       decoration: BoxDecoration(
-                        color: AppColors.white.withValues(alpha: 0.78),
+                        color: AppColors.of(context).white.withValues(alpha: 0.78),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: AppColors.white.withValues(alpha: 0.42),
+                          color: AppColors.of(context).white.withValues(alpha: 0.42),
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -694,13 +701,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         children: [
                           Row(
                             children: [
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'By location',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkGray,
+                                    color: AppColors.of(context).darkGray,
                                   ),
                                 ),
                               ),
@@ -708,22 +715,22 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                 onTap: () => Navigator.of(dialogContext).pop(),
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: AppColors.white.withValues(
+                                    color: AppColors.of(context).white.withValues(
                                       alpha: 0.56,
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   padding: const EdgeInsets.all(6),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.close,
                                     size: 16,
-                                    color: AppColors.mediumGray,
+                                    color: AppColors.of(context).mediumGray,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: rowHeight * visibleRows,
@@ -762,36 +769,36 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                             shape: BoxShape.circle,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
+                                        SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
                                             _zoneNameForTag(entry.key),
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
-                                              color: AppColors.darkGray,
+                                              color: AppColors.of(context).darkGray,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
+                                        SizedBox(width: 12),
                                         Text(
                                           '$listingCount',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: AppColors.darkGray,
+                                            color: AppColors.of(context).darkGray,
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
+                                        SizedBox(width: 4),
                                         Text(
                                           listingCount == 1
                                               ? 'result'
                                               : 'results',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 12,
-                                            color: AppColors.mediumGray,
+                                            color: AppColors.of(context).mediumGray,
                                           ),
                                         ),
                                       ],
@@ -844,7 +851,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.of(context).white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -868,24 +875,24 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       errorBuilder: (_, __, ___) => Container(
                         width: 88,
                         height: 88,
-                        color: AppColors.lightGray,
-                        child: const Icon(
+                        color: AppColors.of(context).lightGray,
+                        child: Icon(
                           Icons.image_not_supported_outlined,
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                         ),
                       ),
                     )
                   : Container(
                       width: 88,
                       height: 88,
-                      color: AppColors.lightGray,
-                      child: const Icon(
+                      color: AppColors.of(context).lightGray,
+                      child: Icon(
                         Icons.image_not_supported_outlined,
-                        color: AppColors.mediumGray,
+                        color: AppColors.of(context).mediumGray,
                       ),
                     ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: SizedBox(
                 height: 88,
@@ -898,19 +905,19 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       children: [
                         Text(
                           item.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: AppColors.darkGray,
+                            color: AppColors.of(context).darkGray,
                             fontSize: 16,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         Text(
                           sellerName,
-                          style: const TextStyle(
-                            color: AppColors.mediumGray,
+                          style: TextStyle(
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -924,26 +931,26 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         Expanded(
                           child: Text(
                             'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
-                            style: const TextStyle(
-                              color: AppColors.darkGray,
+                            style: TextStyle(
+                              color: AppColors.of(context).darkGray,
                               fontWeight: FontWeight.bold,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Text(
                           _timeAgo(item.createdAt),
-                          style: const TextStyle(
-                            color: AppColors.mediumGray,
+                          style: TextStyle(
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 12,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(
+                        SizedBox(width: 4),
+                        Icon(
                           Icons.chevron_right,
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                         ),
                       ],
                     ),
@@ -982,13 +989,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '$zoneName · ${items.length} listing${items.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    color: AppColors.white,
+                  style: TextStyle(
+                    color: AppColors.of(context).white,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -998,21 +1005,21 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               GestureDetector(
                 onTap: () => setState(() => _selectedZoneTag = null),
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: AppColors.darkGray,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).darkGray,
                     shape: BoxShape.circle,
                   ),
                   padding: const EdgeInsets.all(5),
-                  child: const Icon(
+                  child: Icon(
                     Icons.close,
-                    color: AppColors.white,
+                    color: AppColors.of(context).white,
                     size: 15,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           SizedBox(
             height: 124,
             child: PageView.builder(
@@ -1040,8 +1047,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           height: 6.0,
           decoration: BoxDecoration(
             color: i == _currentCardPage
-                ? AppColors.darkGray
-                : AppColors.mediumGray,
+                ? AppColors.of(context).darkGray
+                : AppColors.of(context).mediumGray,
             borderRadius: BorderRadius.circular(3),
           ),
         ),

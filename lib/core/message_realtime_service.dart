@@ -6,15 +6,20 @@ import 'package:flutter/foundation.dart';
 import '../main.dart';
 import '../models/models.dart';
 import 'api_client.dart';
+import 'avatar_resolver.dart';
 import 'auth_service.dart';
 import 'stomp_service.dart';
 
 class IncomingConversationMessage {
   final int conversationId;
+  final String senderName;
+  final String? senderAvatarUrl;
   final MessageResponse message;
 
   const IncomingConversationMessage({
     required this.conversationId,
+    required this.senderName,
+    this.senderAvatarUrl,
     required this.message,
   });
 }
@@ -28,6 +33,9 @@ class MessageRealtimeService {
       ValueNotifier(null);
 
   final Map<int, VoidCallback> _subscriptions = {};
+  final Map<int, String> _conversationSenderNames = {};
+  final Map<int, int> _conversationSenderIds = {};
+  final Map<int, String?> _conversationSenderAvatarUrls = {};
   bool _started = false;
   bool _refreshing = false;
   int? _myUserId;
@@ -60,6 +68,9 @@ class MessageRealtimeService {
     _subscriptions.clear();
     _serverUnreadCount = 0;
     _lastSubscribedConnectionGeneration = -1;
+    _conversationSenderNames.clear();
+    _conversationSenderIds.clear();
+    _conversationSenderAvatarUrls.clear();
     unreadConversationIdsNotifier.value = <int>{};
     latestMessagesNotifier.value = <int, MessageResponse>{};
     incomingMessageNotifier.value = null;
@@ -95,6 +106,19 @@ class MessageRealtimeService {
       final items = (resp.data['items'] as List)
           .map((e) => ConversationListItem.fromJson(e as Map<String, dynamic>))
           .toList();
+
+      for (final item in items) {
+        _conversationSenderNames[item.id] = item.counterpartFullName;
+        _conversationSenderIds[item.id] = item.counterpartUserId;
+      }
+
+      final avatarUrls = await avatarResolver.resolveAvatarUrls(
+        items.map((item) => item.counterpartUserId),
+      );
+      for (final item in items) {
+        _conversationSenderAvatarUrls[item.id] =
+            avatarUrls[item.counterpartUserId];
+      }
 
       for (final item in items) {
         conversationVisitedAt.putIfAbsent(
@@ -168,6 +192,9 @@ class MessageRealtimeService {
       _syncUnreadBadge();
       incomingMessageNotifier.value = IncomingConversationMessage(
         conversationId: conversationId,
+        senderName:
+            _conversationSenderNames[conversationId] ?? 'New message',
+        senderAvatarUrl: _conversationSenderAvatarUrls[conversationId],
         message: msg,
       );
     }

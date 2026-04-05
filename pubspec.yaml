@@ -19,6 +19,7 @@ dependencies:
   stomp_dart_client: ^3.0.1
   json_annotation: ^4.8.1
   google_maps_flutter: ^2.9.0
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

@@ -68,7 +68,7 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -77,19 +77,19 @@ class _AccountScreenState extends State<AccountScreen> {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -110,7 +110,7 @@ class _AccountScreenState extends State<AccountScreen> {
               child: Text(
                 'Account',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                 ),
@@ -123,15 +123,15 @@ class _AccountScreenState extends State<AccountScreen> {
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundColor: AppColors.darkGray,
+                      backgroundColor: AppColors.of(context).darkGray,
                       backgroundImage: _avatarUrl != null
                           ? NetworkImage(_avatarUrl!)
                           : null,
                       child: _avatarUrl == null
                           ? Text(
                               _userName[0].toUpperCase(),
-                              style: const TextStyle(
-                                color: AppColors.white,
+                              style: TextStyle(
+                                color: AppColors.of(context).white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 22,
                               ),
@@ -144,8 +144,8 @@ class _AccountScreenState extends State<AccountScreen> {
                       children: [
                         Text(
                           _userName,
-                          style: const TextStyle(
-                            color: AppColors.darkGray,
+                          style: TextStyle(
+                            color: AppColors.of(context).darkGray,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -153,8 +153,8 @@ class _AccountScreenState extends State<AccountScreen> {
                         if (_userEmail.isNotEmpty)
                           Text(
                             _userEmail,
-                            style: const TextStyle(
-                              color: AppColors.mediumGray,
+                            style: TextStyle(
+                              color: AppColors.of(context).mediumGray,
                               fontSize: 14,
                             ),
                           ),
@@ -210,6 +210,9 @@ class _AccountScreenState extends State<AccountScreen> {
                       );
                     },
                   ),
+                  const SizedBox(height: 12),
+                  // Theme Card
+                  _buildThemeCard(),
                   const SizedBox(height: 24),
                   // Logout Button
                   Center(
@@ -218,16 +221,16 @@ class _AccountScreenState extends State<AccountScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _logout,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: AppColors.white,
+                          backgroundColor: AppColors.of(context).primary,
+                          foregroundColor: AppColors.of(context).white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 0,
                         ),
-                        icon: const Icon(Icons.logout, color: AppColors.white),
-                        label: const Text(
+                        icon: Icon(Icons.logout, color: AppColors.of(context).white),
+                        label: Text(
                           'Logout',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -260,7 +263,7 @@ class _AccountScreenState extends State<AccountScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.of(context).white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -277,10 +280,10 @@ class _AccountScreenState extends State<AccountScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: AppColors.of(context).primary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: AppColors.white, size: 24),
+              child: Icon(icon, color: AppColors.of(context).white, size: 24),
             ),
             const SizedBox(width: 16),
             // Text Stack
@@ -291,7 +294,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -299,15 +302,123 @@ class _AccountScreenState extends State<AccountScreen> {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(color: AppColors.mediumGray, fontSize: 14),
+                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 14),
                   ),
                 ],
               ),
             ),
             // Trailing Arrow
-            Icon(Icons.chevron_right, color: AppColors.mediumGray, size: 24),
+            Icon(Icons.chevron_right, color: AppColors.of(context).mediumGray, size: 24),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard() {
+    final c = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: c.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Sun/moon pill toggle (leading)
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeModeNotifier,
+            builder: (context, mode, _) {
+              final isDark = mode == ThemeMode.dark;
+              final tc = AppColors.of(context);
+              return GestureDetector(
+                onTap: () => setThemeMode(
+                  isDark ? ThemeMode.light : ThemeMode.dark,
+                ),
+                child: Container(
+                  width: 72,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: tc.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: tc.mediumGray.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      AnimatedAlign(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeInOut,
+                        alignment: isDark
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: tc.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Icon(
+                            Icons.wb_sunny_rounded,
+                            size: 17,
+                            color: isDark
+                                ? tc.mediumGray
+                                : Colors.amber.shade700,
+                          ),
+                          Icon(
+                            Icons.nightlight_round,
+                            size: 17,
+                            color: isDark
+                                ? Colors.amber.shade700
+                                : tc.mediumGray,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 16),
+          // Text
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Theme',
+                  style: TextStyle(
+                    color: c.darkGray,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Light / Dark appearance',
+                  style: TextStyle(color: c.mediumGray, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

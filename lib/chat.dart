@@ -5,6 +5,7 @@ import 'main.dart';
 import 'inbox.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'core/avatar_resolver.dart';
 import 'core/message_realtime_service.dart';
@@ -165,7 +166,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -174,19 +175,19 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -206,7 +207,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             child: Text(
               'Messages',
               style: TextStyle(
-                color: AppColors.darkGray,
+                color: AppColors.of(context).darkGray,
                 fontSize: 32,
                 fontWeight: FontWeight.w900,
               ),
@@ -215,13 +216,19 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
           // Conversation List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonShimmer(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: 5,
+                      itemBuilder: (_, __) => const ChatTileSkeleton(),
+                    ),
+                  )
                 : _groups.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'No conversations yet',
                       style: TextStyle(
-                        color: AppColors.mediumGray,
+                        color: AppColors.of(context).mediumGray,
                         fontSize: 16,
                       ),
                     ),
@@ -362,7 +369,7 @@ class _GroupedChatTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.of(context).white,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -374,17 +381,17 @@ class _GroupedChatTile extends StatelessWidget {
                   )
                 : CircleAvatar(
                     radius: 28,
-                    backgroundColor: AppColors.lightGray,
+                    backgroundColor: AppColors.of(context).lightGray,
                     child: Text(
                       initials,
-                      style: const TextStyle(
-                        color: AppColors.darkGray,
+                      style: TextStyle(
+                        color: AppColors.of(context).darkGray,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
                     ),
                   ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,29 +399,29 @@ class _GroupedChatTile extends StatelessWidget {
                   Text(
                     group.counterpartFullName,
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontWeight: hasUnread ? FontWeight.w900 : FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: AppColors.mediumGray,
+                    style: TextStyle(
+                      color: AppColors.of(context).mediumGray,
                       fontSize: 12,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (group.effectiveLastMessageBody != null) ...[
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
                       group.effectiveLastMessageBody!,
                       style: TextStyle(
                         color: hasUnread
-                            ? AppColors.darkGray
-                            : AppColors.mediumGray,
+                            ? AppColors.of(context).darkGray
+                            : AppColors.of(context).mediumGray,
                         fontWeight: hasUnread
                             ? FontWeight.w600
                             : FontWeight.normal,
@@ -433,18 +440,18 @@ class _GroupedChatTile extends StatelessWidget {
               children: [
                 Text(
                   _timeAgo(group.effectiveLastMessageAt),
-                  style: const TextStyle(
-                    color: AppColors.mediumGray,
+                  style: TextStyle(
+                    color: AppColors.of(context).mediumGray,
                     fontSize: 12,
                   ),
                 ),
                 if (hasUnread) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Container(
                     width: 10,
                     height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.darkGray,
+                    decoration: BoxDecoration(
+                      color: AppColors.of(context).darkGray,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -477,40 +484,40 @@ class _ThreadPickerSheet extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Container(
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: AppColors.mediumGray,
+            color: AppColors.of(context).mediumGray,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'Conversations with ${group.counterpartFullName}',
-            style: const TextStyle(
-              color: AppColors.darkGray,
+            style: TextStyle(
+              color: AppColors.of(context).darkGray,
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         ...group.conversations.map(
           (conv) => ListTile(
             leading: Icon(
               Icons.chat_bubble_outline,
               color: conv.unreadCount > 0
-                  ? AppColors.teal
-                  : AppColors.mediumGray,
+                  ? AppColors.of(context).primary
+                  : AppColors.of(context).mediumGray,
             ),
             title: Text(
               conv.listingTitle,
-              style: const TextStyle(
-                color: AppColors.darkGray,
+              style: TextStyle(
+                color: AppColors.of(context).darkGray,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -519,7 +526,7 @@ class _ThreadPickerSheet extends StatelessWidget {
                     conv.lastMessageBody!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.mediumGray),
+                    style: TextStyle(color: AppColors.of(context).mediumGray),
                   )
                 : null,
             trailing: Column(
@@ -528,25 +535,25 @@ class _ThreadPickerSheet extends StatelessWidget {
               children: [
                 Text(
                   _timeAgo(conv.lastMessageAt),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.mediumGray,
+                    color: AppColors.of(context).mediumGray,
                   ),
                 ),
                 if (conv.unreadCount > 0) ...[
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 2,
                     ),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: Colors.red,
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     child: Text(
                       conv.unreadCount > 99 ? '99+' : '${conv.unreadCount}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -559,7 +566,7 @@ class _ThreadPickerSheet extends StatelessWidget {
             onTap: () => onSelect(conv),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
       ],
     );
   }

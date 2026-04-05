@@ -3,6 +3,7 @@ import 'main.dart';
 import 'sell.dart';
 import 'saved.dart';
 import 'widgets/main_nav_bar.dart';
+import 'widgets/skeletons.dart';
 import 'core/api_client.dart';
 import 'models/models.dart';
 
@@ -79,7 +80,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -88,19 +89,19 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -125,7 +126,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                   },
                   child: Icon(
                     Icons.arrow_back,
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     size: 28,
                   ),
                 ),
@@ -133,7 +134,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                 Text(
                   'My Listings',
                   style: TextStyle(
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
                   ),
@@ -162,7 +163,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
           // Listings
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonShimmer(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: 4,
+                      itemBuilder: (_, __) => const MyListingCardSkeleton(),
+                    ),
+                  )
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView.builder(
@@ -191,9 +198,9 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.teal : AppColors.white,
+          color: isSelected ? AppColors.of(context).primary : AppColors.of(context).white,
           border: Border.all(
-            color: isSelected ? AppColors.teal : AppColors.lightGray,
+            color: isSelected ? AppColors.of(context).primary : AppColors.of(context).lightGray,
             width: 1,
           ),
           borderRadius: BorderRadius.circular(20),
@@ -201,7 +208,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? AppColors.white : AppColors.darkGray,
+            color: isSelected ? AppColors.of(context).white : AppColors.of(context).darkGray,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             fontSize: 14,
           ),
@@ -214,7 +221,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: AppColors.of(context).white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -246,10 +253,10 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                       : Container(
                           width: 80,
                           height: 80,
-                          color: AppColors.lightGray,
-                          child: const Icon(
+                          color: AppColors.of(context).lightGray,
+                          child: Icon(
                             Icons.image_not_supported_outlined,
-                            color: AppColors.mediumGray,
+                            color: AppColors.of(context).mediumGray,
                             size: 28,
                           ),
                         ),
@@ -264,7 +271,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                       Text(
                         item.title,
                         style: TextStyle(
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -276,7 +283,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                       Text(
                         item.description ?? '',
                         style: TextStyle(
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                           fontSize: 13,
                         ),
                         maxLines: 1,
@@ -289,13 +296,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                           Icon(
                             Icons.location_on,
                             size: 14,
-                            color: AppColors.mediumGray,
+                            color: AppColors.of(context).mediumGray,
                           ),
                           const SizedBox(width: 2),
                           Text(
                             item.locationText ?? item.campus ?? 'MUST Campus',
                             style: TextStyle(
-                              color: AppColors.mediumGray,
+                              color: AppColors.of(context).mediumGray,
                               fontSize: 12,
                             ),
                           ),
@@ -307,10 +314,10 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                         'UGX ${item.priceUgx.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                         style: TextStyle(
                           color: item.status == ListingStatus.SOLD
-                              ? AppColors.mediumGray
+                              ? AppColors.of(context).mediumGray
                               : item.status == ListingStatus.DELETED
                               ? Colors.red
-                              : AppColors.teal,
+                              : AppColors.of(context).primary,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           decoration: item.status == ListingStatus.DELETED
@@ -509,7 +516,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                           style: TextStyle(
                             color: item.status == ListingStatus.ACTIVE
                                 ? Color(0xFF2E7D32)
-                                : AppColors.mediumGray,
+                                : AppColors.of(context).mediumGray,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -534,7 +541,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
     bool hasBorder = false,
   }) {
     final effectiveColor = isDisabled
-        ? AppColors.mediumGray.withValues(alpha: 0.4)
+        ? AppColors.of(context).mediumGray.withValues(alpha: 0.4)
         : color;
 
     return GestureDetector(
@@ -546,7 +553,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                 color: Colors.transparent,
                 border: Border.all(
                   color: isDisabled
-                      ? AppColors.lightGray
+                      ? AppColors.of(context).lightGray
                       : effectiveColor.withValues(alpha: 0.5),
                   width: 1,
                 ),
@@ -593,14 +600,14 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
           title: Text(
             title,
             style: TextStyle(
-              color: AppColors.darkGray,
+              color: AppColors.of(context).darkGray,
               fontWeight: FontWeight.bold,
               fontSize: 18,
             ),
           ),
           content: Text(
             message,
-            style: TextStyle(color: AppColors.mediumGray, fontSize: 15),
+            style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 15),
           ),
           actions: [
             TextButton(
@@ -610,7 +617,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
               child: Text(
                 'No',
                 style: TextStyle(
-                  color: AppColors.mediumGray,
+                  color: AppColors.of(context).mediumGray,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -622,8 +629,8 @@ class _MyListingsScreenState extends State<MyListingsScreen> with RouteAware {
                 onConfirm();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                foregroundColor: AppColors.white,
+                backgroundColor: AppColors.of(context).primary,
+                foregroundColor: AppColors.of(context).white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

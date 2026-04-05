@@ -207,7 +207,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -215,7 +215,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 // Back Button and Heading
                 Row(
                   children: [
@@ -227,40 +227,40 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: AppColors.lightGray,
+                          color: AppColors.of(context).lightGray,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.mediumGray.withValues(alpha: 0.3),
+                            color: AppColors.of(context).mediumGray.withValues(alpha: 0.3),
                             width: 1,
                           ),
                         ),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           size: 20,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    SizedBox(width: 16),
                     Text(
                       'Authenticate Email',
                       style: TextStyle(
-                        color: AppColors.darkGray,
+                        color: AppColors.of(context).darkGray,
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 // Stepper
                 _buildStepper(currentStep: 1),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
                 // Email notification text
                 RichText(
                   text: TextSpan(
                     style: TextStyle(
-                      color: AppColors.mediumGray,
+                      color: AppColors.of(context).mediumGray,
                       fontSize: 16,
                       height: 1.5,
                     ),
@@ -269,24 +269,24 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                       TextSpan(
                         text: _maskEmail(widget.email),
                         style: TextStyle(
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 // Enter code below text
                 Text(
                   'Enter code below',
                   style: TextStyle(
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 // OTP Input Fields
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -304,41 +304,41 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                         ),
                         decoration: InputDecoration(
                           counterText: '',
                           filled: true,
                           fillColor: _isOtpConfirmed
-                              ? AppColors.teal.withValues(alpha: 0.1)
-                              : AppColors.white,
+                              ? AppColors.of(context).primary.withValues(alpha: 0.1)
+                              : AppColors.of(context).white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
                               color: _isOtpConfirmed
-                                  ? AppColors.teal
-                                  : AppColors.lightGray,
+                                  ? AppColors.of(context).primary
+                                  : AppColors.of(context).lightGray,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
                               color: _isOtpConfirmed
-                                  ? AppColors.teal
-                                  : AppColors.lightGray,
+                                  ? AppColors.of(context).primary
+                                  : AppColors.of(context).lightGray,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: AppColors.teal,
+                              color: AppColors.of(context).primary,
                               width: 2,
                             ),
                           ),
                           disabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: AppColors.teal,
+                              color: AppColors.of(context).primary,
                               width: 2,
                             ),
                           ),
@@ -362,16 +362,16 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                   }),
                 ),
                 if (_otpTouched && _otpError != null) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     _otpError!,
-                    style: const TextStyle(
-                      color: AppColors.darkGray,
+                    style: TextStyle(
+                      color: AppColors.of(context).darkGray,
                       fontSize: 12,
                     ),
                   ),
                 ],
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
                 // Submit/Confirmed Button
                 SizedBox(
                   width: double.infinity,
@@ -382,24 +382,24 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                         : (!_isOtpComplete ? null : _handleOtpSubmit),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isOtpConfirmed
-                          ? AppColors.teal
-                          : Colors.black,
-                      foregroundColor: AppColors.white,
+                          ? AppColors.of(context).primary
+                          : AppColors.of(context).primary,
+                      foregroundColor: AppColors.of(context).white,
                       disabledBackgroundColor: _isOtpConfirmed
-                          ? AppColors.teal
+                          ? AppColors.of(context).primary
                           : Colors.black54,
-                      disabledForegroundColor: AppColors.white,
+                      disabledForegroundColor: AppColors.of(context).white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
                     ),
                     child: _isLoading && !_isOtpConfirmed
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color: AppColors.of(context).white,
                               strokeWidth: 2,
                             ),
                           )
@@ -407,11 +407,11 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               if (_isOtpConfirmed)
-                                const Icon(Icons.check_circle, size: 20),
-                              if (_isOtpConfirmed) const SizedBox(width: 8),
+                                Icon(Icons.check_circle, size: 20),
+                              if (_isOtpConfirmed) SizedBox(width: 8),
                               Text(
                                 _isOtpConfirmed ? 'Confirmed' : 'Submit',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -422,17 +422,17 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                 ),
                 // Password Fields (shown after OTP confirmation)
                 if (_showPasswordFields) ...[
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40),
                   // Create password text
                   Text(
                     'Create password',
                     style: TextStyle(
-                      color: AppColors.darkGray,
+                      color: AppColors.of(context).darkGray,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   _buildPasswordField(
                     label: 'Password',
                     controller: _passwordController,
@@ -444,12 +444,12 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                       });
                     },
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     'Min. 8 characters · uppercase · number · special character (e.g. SecurePass123!)',
-                    style: TextStyle(color: AppColors.mediumGray, fontSize: 12),
+                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 12),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildPasswordField(
                     label: 'Confirm Password',
                     controller: _confirmPasswordController,
@@ -463,7 +463,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                       });
                     },
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40),
                   // Final Confirm Button
                   SizedBox(
                     width: double.infinity,
@@ -473,23 +473,23 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                           ? null
                           : _handleConfirm,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: AppColors.white,
+                        backgroundColor: AppColors.of(context).primary,
+                        foregroundColor: AppColors.of(context).white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 0,
                       ),
                       child: _isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
-                                color: Colors.white,
+                                color: AppColors.of(context).white,
                                 strokeWidth: 2,
                               ),
                             )
-                          : const Text(
+                          : Text(
                               'Confirm',
                               style: TextStyle(
                                 fontSize: 16,
@@ -499,7 +499,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
               ],
             ),
           ),
@@ -518,24 +518,24 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 0 ? AppColors.teal : AppColors.white,
+                  color: currentStep >= 0 ? AppColors.of(context).primary : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 0
-                        ? AppColors.teal
-                        : AppColors.mediumGray,
+                        ? AppColors.of(context).primary
+                        : AppColors.of(context).mediumGray,
                     width: 2,
                   ),
                 ),
                 child: Center(
-                  child: Icon(Icons.check, color: AppColors.white, size: 16),
+                  child: Icon(Icons.check, color: AppColors.of(context).white, size: 16),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 'Details',
                 style: TextStyle(
-                  color: AppColors.teal,
+                  color: AppColors.of(context).primary,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -546,7 +546,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         Expanded(
           child: Container(
             height: 2,
-            color: currentStep >= 1 ? AppColors.teal : AppColors.white,
+            color: currentStep >= 1 ? AppColors.of(context).primary : AppColors.of(context).white,
           ),
         ),
         Expanded(
@@ -556,12 +556,12 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 1 ? AppColors.teal : AppColors.white,
+                  color: currentStep >= 1 ? AppColors.of(context).primary : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 1
-                        ? AppColors.teal
-                        : AppColors.mediumGray,
+                        ? AppColors.of(context).primary
+                        : AppColors.of(context).mediumGray,
                     width: 2,
                   ),
                 ),
@@ -570,21 +570,21 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     '2',
                     style: TextStyle(
                       color: currentStep >= 1
-                          ? AppColors.white
-                          : AppColors.mediumGray,
+                          ? AppColors.of(context).white
+                          : AppColors.of(context).mediumGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 'Verify',
                 style: TextStyle(
                   color: currentStep >= 1
-                      ? AppColors.teal
-                      : AppColors.mediumGray,
+                      ? AppColors.of(context).primary
+                      : AppColors.of(context).mediumGray,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -595,7 +595,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         Expanded(
           child: Container(
             height: 2,
-            color: currentStep >= 2 ? AppColors.teal : AppColors.white,
+            color: currentStep >= 2 ? AppColors.of(context).primary : AppColors.of(context).white,
           ),
         ),
         Expanded(
@@ -605,12 +605,12 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 2 ? AppColors.teal : AppColors.white,
+                  color: currentStep >= 2 ? AppColors.of(context).primary : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 2
-                        ? AppColors.teal
-                        : AppColors.mediumGray,
+                        ? AppColors.of(context).primary
+                        : AppColors.of(context).mediumGray,
                     width: 2,
                   ),
                 ),
@@ -619,21 +619,21 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                     '3',
                     style: TextStyle(
                       color: currentStep >= 2
-                          ? AppColors.white
-                          : AppColors.mediumGray,
+                          ? AppColors.of(context).white
+                          : AppColors.of(context).mediumGray,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 'Browse',
                 style: TextStyle(
                   color: currentStep >= 2
-                      ? AppColors.teal
-                      : AppColors.mediumGray,
+                      ? AppColors.of(context).primary
+                      : AppColors.of(context).mediumGray,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -659,54 +659,54 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         Text(
           label,
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         TextField(
           controller: controller,
           obscureText: !isPasswordVisible,
           decoration: InputDecoration(
             hintText: '........',
-            hintStyle: TextStyle(color: AppColors.lightGray),
+            hintStyle: TextStyle(color: AppColors.of(context).lightGray),
             errorText: errorText,
-            errorStyle: const TextStyle(color: AppColors.darkGray),
+            errorStyle: TextStyle(color: AppColors.of(context).darkGray),
             suffixIcon: IconButton(
               icon: Icon(
                 isPasswordVisible
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
-                color: AppColors.mediumGray,
+                color: AppColors.of(context).mediumGray,
               ),
               onPressed: onToggleVisibility,
             ),
             filled: true,
-            fillColor: AppColors.white,
+            fillColor: AppColors.of(context).white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+                color: hasError ? AppColors.of(context).darkGray : AppColors.of(context).lightGray,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: hasError ? AppColors.darkGray : AppColors.lightGray,
+                color: hasError ? AppColors.of(context).darkGray : AppColors.of(context).lightGray,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.teal, width: 2),
+              borderSide: BorderSide(color: AppColors.of(context).primary, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
+              borderSide: BorderSide(color: AppColors.of(context).darkGray, width: 2),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.darkGray, width: 2),
+              borderSide: BorderSide(color: AppColors.of(context).darkGray, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,

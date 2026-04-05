@@ -31,27 +31,27 @@ class MainNavBar extends StatelessWidget {
         Navigator.pushReplacementNamed(context, _routes[index]);
       },
       type: BottomNavigationBarType.fixed,
-      backgroundColor: AppColors.white,
-      selectedItemColor: AppColors.teal,
-      unselectedItemColor: AppColors.mediumGray,
+      backgroundColor: AppColors.of(context).white,
+      selectedItemColor: AppColors.of(context).primary,
+      unselectedItemColor: AppColors.of(context).mediumGray,
       showSelectedLabels: true,
       showUnselectedLabels: true,
-      selectedLabelStyle: const TextStyle(
+      selectedLabelStyle: TextStyle(
         fontWeight: FontWeight.w600,
         height: 1.0,
       ),
-      unselectedLabelStyle: const TextStyle(
+      unselectedLabelStyle: TextStyle(
         height: 1.0,
       ),
       iconSize: 24,
       elevation: 0,
       items: [
-        const BottomNavigationBarItem(
+        BottomNavigationBarItem(
           icon: Icon(Icons.list_alt_outlined),
           activeIcon: Icon(Icons.list_alt),
           label: 'Browse',
         ),
-        const BottomNavigationBarItem(
+        BottomNavigationBarItem(
           icon: Icon(Icons.search),
           activeIcon: Icon(Icons.search),
           label: 'Search',
@@ -59,9 +59,9 @@ class MainNavBar extends StatelessWidget {
         BottomNavigationBarItem(
           icon: Icon(
             Icons.add_circle_outline,
-            color: currentIndex == 2 ? AppColors.teal : AppColors.mediumGray,
+            color: currentIndex == 2 ? AppColors.of(context).primary : AppColors.of(context).mediumGray,
           ),
-          activeIcon: const Icon(Icons.add_circle, color: AppColors.teal),
+          activeIcon: Icon(Icons.add_circle, color: AppColors.of(context).primary),
           label: 'Sell',
         ),
         BottomNavigationBarItem(
@@ -69,7 +69,7 @@ class MainNavBar extends StatelessWidget {
           activeIcon: const _ChatIcon(active: true),
           label: 'Chat',
         ),
-        const BottomNavigationBarItem(
+        BottomNavigationBarItem(
           icon: Icon(Icons.account_circle_outlined),
           activeIcon: Icon(Icons.account_circle),
           label: 'Account',
@@ -88,6 +88,7 @@ class _ChatIcon extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: unreadNotifier,
       builder: (context, count, _) {
+        final badgeColor = active ? AppColors.of(context).white : AppColors.of(context).primary;
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -99,8 +100,8 @@ class _ChatIcon extends StatelessWidget {
                 child: Container(
                   width: 9,
                   height: 9,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
+                  decoration: BoxDecoration(
+                    color: badgeColor,
                     shape: BoxShape.circle,
                   ),
                 ),

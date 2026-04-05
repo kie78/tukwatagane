@@ -368,7 +368,7 @@ class _SellScreenState extends State<SellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightGray,
+      backgroundColor: AppColors.of(context).lightGray,
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -377,19 +377,19 @@ class _SellScreenState extends State<SellScreen> {
             child: Image.asset('assets/images/logo.jpg', width: 40, height: 40),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Tukwatagane',
           style: TextStyle(
-            color: AppColors.darkGray,
+            color: AppColors.of(context).darkGray,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.bookmark_border,
-              color: AppColors.mediumGray,
+              color: AppColors.of(context).mediumGray,
             ),
             onPressed: () {
               Navigator.push(
@@ -410,22 +410,22 @@ class _SellScreenState extends State<SellScreen> {
               Text(
                 widget.editingItemId != null ? 'Edit Listing' : 'Sell an Item',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Image Upload Section
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(32),
                 decoration: BoxDecoration(
-                  color: AppColors.white,
+                  color: AppColors.of(context).white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppColors.lightGray,
+                    color: AppColors.of(context).lightGray,
                     width: 2,
                     strokeAlign: BorderSide.strokeAlignInside,
                   ),
@@ -438,7 +438,7 @@ class _SellScreenState extends State<SellScreen> {
                         children: [
                           Icon(
                             Icons.camera_alt,
-                            color: AppColors.teal,
+                            color: AppColors.of(context).primary,
                             size: 48,
                           ),
                           Positioned(
@@ -447,33 +447,33 @@ class _SellScreenState extends State<SellScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
-                                color: AppColors.teal,
+                                color: AppColors.of(context).primary,
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
                                 Icons.add,
-                                color: Colors.white,
+                                color: AppColors.of(context).white,
                                 size: 16,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
+                      SizedBox(height: 16),
+                      Text(
                         'Upload Photo',
                         style: TextStyle(
-                          color: AppColors.darkGray,
+                          color: AppColors.of(context).darkGray,
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
+                      SizedBox(height: 8),
+                      Text(
                         'Add 1 clear photo. Clear details help items sell faster.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                           fontSize: 14,
                         ),
                       ),
@@ -502,13 +502,13 @@ class _SellScreenState extends State<SellScreen> {
                                     onTap: () => _removeExistingImage(img),
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
+                                      decoration: BoxDecoration(
                                         color: Colors.red,
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.close,
-                                        color: Colors.white,
+                                        color: AppColors.of(context).white,
                                         size: 16,
                                       ),
                                     ),
@@ -539,13 +539,13 @@ class _SellScreenState extends State<SellScreen> {
                                     onTap: () => _removeImage(index),
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
+                                      decoration: BoxDecoration(
                                         color: Colors.red,
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.close,
-                                        color: Colors.white,
+                                        color: AppColors.of(context).white,
                                         size: 16,
                                       ),
                                     ),
@@ -557,20 +557,20 @@ class _SellScreenState extends State<SellScreen> {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 20),
+                    SizedBox(height: 20),
                     (_existingImages.length + _selectedImages.length) < 1
                         ? ElevatedButton.icon(
                             onPressed: _pickImage,
-                            icon: const Icon(Icons.add, color: Colors.white),
-                            label: const Text(
+                            icon: Icon(Icons.add, color: Colors.white),
+                            label: Text(
                               'Add Photo',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: AppColors.of(context).white,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.teal,
+                              backgroundColor: AppColors.of(context).primary,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 24,
                                 vertical: 12,
@@ -583,8 +583,8 @@ class _SellScreenState extends State<SellScreen> {
                         : ElevatedButton(
                             onPressed: null,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.mediumGray,
-                              disabledBackgroundColor: AppColors.lightGray,
+                              backgroundColor: AppColors.of(context).mediumGray,
+                              disabledBackgroundColor: AppColors.of(context).lightGray,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 24,
                                 vertical: 12,
@@ -593,10 +593,10 @@ class _SellScreenState extends State<SellScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Max 1 Photo',
                               style: TextStyle(
-                                color: AppColors.mediumGray,
+                                color: AppColors.of(context).mediumGray,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -604,36 +604,36 @@ class _SellScreenState extends State<SellScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Title Field
-              const Text(
+              Text(
                 'Title',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
                   hintText: 'What are you selling?',
-                  hintStyle: const TextStyle(color: AppColors.mediumGray),
+                  hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                   filled: true,
-                  fillColor: AppColors.white,
+                  fillColor: AppColors.of(context).white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.teal),
+                    borderSide: BorderSide(color: AppColors.of(context).primary),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -641,37 +641,37 @@ class _SellScreenState extends State<SellScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Price Field
-              const Text(
+              Text(
                 'Price',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               TextField(
                 controller: _priceController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   hintText: 'UGX 12,000',
-                  hintStyle: const TextStyle(color: AppColors.mediumGray),
+                  hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                   filled: true,
-                  fillColor: AppColors.white,
+                  fillColor: AppColors.of(context).white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.teal),
+                    borderSide: BorderSide(color: AppColors.of(context).primary),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -679,59 +679,59 @@ class _SellScreenState extends State<SellScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Category Field
-              const Text(
+              Text(
                 'Category',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               LayoutBuilder(
                 builder: (context, constraints) {
                   return DropdownButtonFormField<String>(
                     value: _selectedCategory,
-                    hint: const Text(
+                    hint: Text(
                       'Select Category',
-                      style: TextStyle(color: AppColors.mediumGray),
+                      style: TextStyle(color: AppColors.of(context).mediumGray),
                     ),
                     isExpanded: true,
                     menuMaxHeight: 300,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: AppColors.white,
+                      fillColor: AppColors.of(context).white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.lightGray,
+                        borderSide: BorderSide(
+                          color: AppColors.of(context).lightGray,
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.lightGray,
+                        borderSide: BorderSide(
+                          color: AppColors.of(context).lightGray,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.teal),
+                        borderSide: BorderSide(color: AppColors.of(context).primary),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
                       ),
                     ),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.keyboard_arrow_down,
-                      color: AppColors.mediumGray,
+                      color: AppColors.of(context).mediumGray,
                     ),
-                    dropdownColor: AppColors.white,
-                    style: const TextStyle(
-                      color: AppColors.darkGray,
+                    dropdownColor: AppColors.of(context).white,
+                    style: TextStyle(
+                      color: AppColors.of(context).darkGray,
                       fontSize: 16,
                     ),
                     items: _categories.map((String category) {
@@ -755,18 +755,18 @@ class _SellScreenState extends State<SellScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Description Field
-              const Text(
+              Text(
                 'Description',
                 style: TextStyle(
-                  color: AppColors.darkGray,
+                  color: AppColors.of(context).darkGray,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               TextField(
                 controller: _descriptionController,
                 maxLength: 500,
@@ -776,20 +776,20 @@ class _SellScreenState extends State<SellScreen> {
                 },
                 decoration: InputDecoration(
                   hintText: 'Describe the condition, brand, and features...',
-                  hintStyle: const TextStyle(color: AppColors.mediumGray),
+                  hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
                   filled: true,
-                  fillColor: AppColors.white,
+                  fillColor: AppColors.of(context).white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGray),
+                    borderSide: BorderSide(color: AppColors.of(context).lightGray),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.teal),
+                    borderSide: BorderSide(color: AppColors.of(context).primary),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                   counterText: '',
@@ -799,31 +799,31 @@ class _SellScreenState extends State<SellScreen> {
                 alignment: Alignment.centerRight,
                 child: Text(
                   '${_descriptionController.text.length}/500',
-                  style: const TextStyle(
-                    color: AppColors.mediumGray,
+                  style: TextStyle(
+                    color: AppColors.of(context).mediumGray,
                     fontSize: 12,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Location Toggle Card
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.white,
+                  color: AppColors.of(context).white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.lightGray),
+                  border: Border.all(color: AppColors.of(context).lightGray),
                 ),
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Use registered location',
                           style: TextStyle(
-                            color: AppColors.darkGray,
+                            color: AppColors.of(context).darkGray,
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -835,18 +835,18 @@ class _SellScreenState extends State<SellScreen> {
                               _useRegisteredLocation = value;
                             });
                           },
-                          activeColor: AppColors.teal,
+                          activeColor: AppColors.of(context).primary,
                         ),
                       ],
                     ),
                     if (_useRegisteredLocation) ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           _registeredLocationLabel,
                           style: TextStyle(
-                            color: AppColors.mediumGray,
+                            color: AppColors.of(context).mediumGray,
                             fontSize: 14,
                           ),
                         ),
@@ -856,79 +856,79 @@ class _SellScreenState extends State<SellScreen> {
                 ),
               ),
               if (!_useRegisteredLocation) ...[
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // OR Divider
                 Row(
                   children: [
                     Expanded(
-                      child: Divider(color: AppColors.lightGray, thickness: 1),
+                      child: Divider(color: AppColors.of(context).lightGray, thickness: 1),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         'OR',
                         style: TextStyle(
-                          color: AppColors.mediumGray,
+                          color: AppColors.of(context).mediumGray,
                           fontSize: 14,
                         ),
                       ),
                     ),
                     Expanded(
-                      child: Divider(color: AppColors.lightGray, thickness: 1),
+                      child: Divider(color: AppColors.of(context).lightGray, thickness: 1),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // Use different location label
-                const Text(
+                Text(
                   'Use different location',
                   style: TextStyle(
-                    color: AppColors.darkGray,
+                    color: AppColors.of(context).darkGray,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
 
                 // Alternate Location
                 DropdownButtonFormField<String>(
                   value: _selectedZone,
-                  hint: const Text(
+                  hint: Text(
                     'Select a zone',
-                    style: TextStyle(color: AppColors.mediumGray),
+                    style: TextStyle(color: AppColors.of(context).mediumGray),
                   ),
                   isExpanded: true,
                   menuMaxHeight: 300,
                   onChanged: (value) => setState(() => _selectedZone = value),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.keyboard_arrow_down,
-                    color: AppColors.mediumGray,
+                    color: AppColors.of(context).mediumGray,
                   ),
-                  dropdownColor: AppColors.white,
-                  style: const TextStyle(
-                    color: AppColors.darkGray,
+                  dropdownColor: AppColors.of(context).white,
+                  style: TextStyle(
+                    color: AppColors.of(context).darkGray,
                     fontSize: 16,
                   ),
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.location_on,
-                      color: AppColors.mediumGray,
+                      color: AppColors.of(context).mediumGray,
                     ),
                     filled: true,
-                    fillColor: AppColors.white,
+                    fillColor: AppColors.of(context).white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.lightGray),
+                      borderSide: BorderSide(color: AppColors.of(context).lightGray),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.lightGray),
+                      borderSide: BorderSide(color: AppColors.of(context).lightGray),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.teal),
+                      borderSide: BorderSide(color: AppColors.of(context).primary),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -943,7 +943,7 @@ class _SellScreenState extends State<SellScreen> {
                   }).toList(),
                 ),
               ],
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
 
               // Post Listing Button
               SizedBox(
@@ -951,18 +951,18 @@ class _SellScreenState extends State<SellScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submitListing,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.teal,
+                    backgroundColor: AppColors.of(context).primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                            color: AppColors.white,
+                            color: AppColors.of(context).white,
                             strokeWidth: 2,
                           ),
                         )
@@ -973,23 +973,23 @@ class _SellScreenState extends State<SellScreen> {
                               widget.editingItemId != null
                                   ? 'Update Listing'
                                   : 'Post Listing',
-                              style: const TextStyle(
-                                color: AppColors.white,
+                              style: TextStyle(
+                                color: AppColors.of(context).white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            const Icon(
+                            SizedBox(width: 8),
+                            Icon(
                               Icons.arrow_forward,
-                              color: AppColors.white,
+                              color: AppColors.of(context).white,
                               size: 20,
                             ),
                           ],
                         ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
             ],
           ),
         ),
