@@ -1,7 +1,6 @@
 class SignupValidators {
   static final RegExp _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final RegExp _regNumberShape = RegExp(r'^[A-Za-z0-9/.-]{5,30}$');
-  static final RegExp _phoneShape = RegExp(r'^\+?[0-9]{9,15}$');
 
   static String? validateFullName(String value) {
     final v = value.trim();
@@ -29,12 +28,12 @@ class SignupValidators {
     return null;
   }
 
+  // Validates just the 9-digit suffix after the +256 prefix.
   static String? validatePhone(String value) {
-    final normalized = value.replaceAll(RegExp(r'\s+'), '').trim();
-    if (normalized.isEmpty) return 'Phone number is required.';
-    if (!_phoneShape.hasMatch(normalized)) {
-      return 'Enter a valid phone number.';
-    }
+    final v = value.trim();
+    if (v.isEmpty) return 'Phone number is required.';
+    if (v.length > 9) return 'Too many digits — enter exactly 9.';
+    if (v.length < 9) return 'Enter valid phone number.';
     return null;
   }
 

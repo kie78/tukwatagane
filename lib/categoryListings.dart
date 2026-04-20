@@ -231,7 +231,7 @@ class _CategoryListingsScreenState extends State<CategoryListingsScreen> {
     final totalH = bodyH + stemH;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const orange = Color(0xFFFF6B35);
+    const orange = Color(0xFF000000);
 
     // Shadow
     canvas.drawRRect(

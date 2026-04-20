@@ -330,52 +330,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   SizedBox(height: 16),
-                  // Locked Credentials Card
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'STUDENT DETAILS',
-                            style: TextStyle(
-                              color: AppColors.of(context).mediumGray,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          SizedBox(height: 12),
-                          // REG NO Field
-                          _buildLockedField(
-                            label: 'REG NO',
-                            value: _profile?.registrationNumber ?? '—',
-                            prefixIcon: Icons.badge,
-                          ),
-                          SizedBox(height: 12),
-                          // EMAIL Field
-                          _buildLockedField(
-                            label: 'EMAIL',
-                            value: _profile?.email ?? '—',
-                            prefixIcon: Icons.email,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                   SizedBox(height: 16),
                   // Personal Information Card
                   Container(
@@ -396,16 +350,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'PERSONAL INFORMATION',
-                            style: TextStyle(
-                              color: AppColors.of(context).mediumGray,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          SizedBox(height: 12),
                           // NAME Field
                           _buildLockedField(
                             label: 'NAME',
@@ -418,6 +362,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             label: 'TEL',
                             value: _profile?.phoneNumber ?? '—',
                             prefixIcon: Icons.phone,
+                          ),
+                          SizedBox(height: 12),
+                          // EMAIL Field
+                          _buildLockedField(
+                            label: 'EMAIL',
+                            value: _profile?.email ?? '—',
+                            prefixIcon: Icons.email,
                           ),
                           SizedBox(height: 12),
                           // REGISTERED LOCATION Field

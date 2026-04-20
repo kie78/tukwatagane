@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
 import 'main.dart';
@@ -20,18 +21,17 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _regNumberController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
   bool _fullNameTouched = false;
-  bool _regNumberTouched = false;
   bool _emailTouched = false;
   bool _phoneTouched = false;
   String? _fullNameError;
-  String? _regNumberError;
   String? _emailError;
   String? _phoneError;
+
+  final FocusNode _phoneFocusNode = FocusNode();
 
   bool _useCurrentLocation = false;
   String? _currentLocationText;
@@ -44,9 +44,9 @@ class _SignupScreenState extends State<SignupScreen> {
   void initState() {
     super.initState();
     _fullNameController.addListener(_onFullNameChanged);
-    _regNumberController.addListener(_onRegNumberChanged);
     _emailController.addListener(_onEmailChanged);
     _phoneController.addListener(_onPhoneChanged);
+    _phoneFocusNode.addListener(() => setState(() {}));
   }
 
   void _onFullNameChanged() {
@@ -54,15 +54,6 @@ class _SignupScreenState extends State<SignupScreen> {
       _fullNameTouched = true;
       _fullNameError = SignupValidators.validateFullName(
         _fullNameController.text,
-      );
-    });
-  }
-
-  void _onRegNumberChanged() {
-    setState(() {
-      _regNumberTouched = true;
-      _regNumberError = SignupValidators.validateRegistrationNumber(
-        _regNumberController.text,
       );
     });
   }
@@ -86,24 +77,17 @@ class _SignupScreenState extends State<SignupScreen> {
   bool get _canSubmitForm {
     final fullNameValid =
         SignupValidators.validateFullName(_fullNameController.text) == null;
-    final regValid =
-        SignupValidators.validateRegistrationNumber(_regNumberController.text) ==
-        null;
     final emailValid =
         SignupValidators.validateUniversityEmail(_emailController.text) == null;
     final phoneValid = SignupValidators.validatePhone(_phoneController.text) == null;
-    return fullNameValid && regValid && emailValid && phoneValid;
+    return fullNameValid && emailValid && phoneValid;
   }
 
   void _validateAllVisibleFields() {
     _fullNameTouched = true;
-    _regNumberTouched = true;
     _emailTouched = true;
     _phoneTouched = true;
     _fullNameError = SignupValidators.validateFullName(_fullNameController.text);
-    _regNumberError = SignupValidators.validateRegistrationNumber(
-      _regNumberController.text,
-    );
     _emailError = SignupValidators.validateUniversityEmail(_emailController.text);
     _phoneError = SignupValidators.validatePhone(_phoneController.text);
   }
@@ -111,11 +95,10 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   void dispose() {
     _fullNameController.removeListener(_onFullNameChanged);
-    _regNumberController.removeListener(_onRegNumberChanged);
     _emailController.removeListener(_onEmailChanged);
     _phoneController.removeListener(_onPhoneChanged);
+    _phoneFocusNode.dispose();
     _fullNameController.dispose();
-    _regNumberController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -206,9 +189,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _submit() async {
     final fullName = _fullNameController.text.trim();
-    final regNumber = _regNumberController.text.trim();
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
+final phone = '+256${_phoneController.text.trim()}';
 
     setState(_validateAllVisibleFields);
     if (!_canSubmitForm) {
@@ -228,7 +210,6 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final body = <String, dynamic>{
         'fullName': fullName,
-        'registrationNumber': regNumber,
         'email': email,
         'phoneNumber': phone,
         'campus': 'main',
@@ -338,16 +319,6 @@ class _SignupScreenState extends State<SignupScreen> {
                   keyboardType: TextInputType.name,
                 ),
                 SizedBox(height: 20),
-                // Registration Number Field
-                _buildInputField(
-                  label: 'Registration Number',
-                  controller: _regNumberController,
-                  hintText: '2023/BIT/...',
-                  icon: Icons.badge_outlined,
-                  errorText: _regNumberTouched ? _regNumberError : null,
-                  keyboardType: TextInputType.text,
-                ),
-                SizedBox(height: 20),
                 // University Email Field
                 _buildInputField(
                   label: 'University Email',
@@ -359,14 +330,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 SizedBox(height: 20),
                 // Tel (Phone) Field
-                _buildInputField(
-                  label: 'Tel',
-                  controller: _phoneController,
-                  hintText: '+256 700 000000',
-                  icon: Icons.phone_outlined,
-                  errorText: _phoneTouched ? _phoneError : null,
-                  keyboardType: TextInputType.phone,
-                ),
+                _buildPhoneField(),
                 SizedBox(height: 20),
                 // Location Section
                 _buildLocationSection(),
@@ -443,6 +407,83 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPhoneField() {
+    final hasError = _phoneTouched && _phoneError != null;
+    final isFocused = _phoneFocusNode.hasFocus;
+    final borderColor = hasError
+        ? AppColors.of(context).darkGray
+        : isFocused
+            ? AppColors.of(context).primary
+            : AppColors.of(context).lightGray;
+    final borderWidth = (hasError || isFocused) ? 2.0 : 1.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tel',
+          style: TextStyle(
+            color: AppColors.of(context).darkGray,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.of(context).white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor, width: borderWidth),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Text(
+                  '+256',
+                  style: TextStyle(
+                    color: AppColors.of(context).darkGray,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Container(width: 1, height: 24, color: AppColors.of(context).lightGray),
+              Expanded(
+                child: TextField(
+                  controller: _phoneController,
+                  focusNode: _phoneFocusNode,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    hintText: '700 000 000',
+                    hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
+                    suffixIcon: Icon(Icons.phone_outlined, color: AppColors.of(context).mediumGray),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (hasError) ...[
+          SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              _phoneError!,
+              style: TextStyle(color: AppColors.of(context).darkGray, fontSize: 12),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
