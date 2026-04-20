@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
@@ -34,12 +36,15 @@ class _BrowseScreenState extends State<BrowseScreen> {
   String? _myFullName;
   String? _myAvatarUrl;
   bool _isLoading = true;
+  bool _isOpeningDeepLink = false;
+  int? _lastOpenedDeepLinkListingId;
   Set<int> _bookmarkedIds = {};
 
   @override
   void initState() {
     super.initState();
     bookmarkUpdateNotifier.addListener(_onBookmarkUpdate);
+    pendingProductDeepLinkNotifier.addListener(_onPendingDeepLinkChanged);
     _loadFeed();
     _bootstrapUnread();
   }
@@ -47,11 +52,16 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   void dispose() {
     bookmarkUpdateNotifier.removeListener(_onBookmarkUpdate);
+    pendingProductDeepLinkNotifier.removeListener(_onPendingDeepLinkChanged);
     super.dispose();
   }
 
   void _onBookmarkUpdate() {
     _loadBookmarkedIds();
+  }
+
+  void _onPendingDeepLinkChanged() {
+    unawaited(_openPendingDeepLink());
   }
 
   Future<void> _loadBookmarkedIds() async {
@@ -166,6 +176,123 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
     publicProfileCache.logDebugStats('BrowseScreen._loadFeed');
     await _loadBookmarkedIds();
+    await _openPendingDeepLink();
+  }
+
+  Future<void> _openPendingDeepLink() async {
+    final listingId = pendingProductDeepLinkNotifier.value;
+    if (!mounted || listingId == null || _isLoading || _isOpeningDeepLink) {
+      return;
+    }
+    if (_lastOpenedDeepLinkListingId == listingId) return;
+
+    _isOpeningDeepLink = true;
+    try {
+      ListingCardResponse? matchedListing;
+      for (final item in _listings) {
+        if (item.id == listingId) {
+          matchedListing = item;
+          break;
+        }
+      }
+
+      if (matchedListing != null) {
+        _pushProductDetails(
+          listingId: matchedListing.id,
+          productTitle: matchedListing.title,
+          productDescription: matchedListing.description ?? '',
+          price: matchedListing.priceUgx,
+          imageUrl: matchedListing.primaryImageUrl,
+          vendorName: matchedListing.ownerFullName ?? 'Seller',
+          vendorLocation: zoneLabel(
+            matchedListing.lat,
+            matchedListing.lng,
+            fallback: matchedListing.locationText ?? '',
+          ),
+          vendorAvatar:
+              matchedListing.ownerAvatarUrl ??
+              _ownerAvatars[matchedListing.ownerUserId],
+          ownerUserIdHint: matchedListing.ownerUserId,
+          initiallyBookmarked: _bookmarkedIds.contains(matchedListing.id),
+        );
+      } else {
+        final resp = await apiClient.dio.get('/listings/$listingId');
+        final listing = ListingResponse.fromJson(resp.data);
+        final profile = await publicProfileCache.resolvePublicProfile(
+          listing.ownerUserId,
+        );
+
+        if (!mounted) return;
+
+        _pushProductDetails(
+          listingId: listing.id,
+          productTitle: listing.title,
+          productDescription: listing.description ?? '',
+          price: listing.priceUgx,
+          imageUrl: listing.primaryImageUrl,
+          vendorName: profile?.fullName ?? 'Seller',
+          vendorLocation:
+              listing.locationText ?? listing.campus ?? 'MUST Campus',
+          vendorAvatar: profile?.avatarUrl,
+          ownerUserIdHint: listing.ownerUserId,
+          initiallyBookmarked: _bookmarkedIds.contains(listing.id),
+        );
+      }
+
+      _lastOpenedDeepLinkListingId = listingId;
+      pendingProductDeepLinkNotifier.value = null;
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrowseScreen._openPendingDeepLink] Failed: $e');
+      }
+      pendingProductDeepLinkNotifier.value = null;
+      if (mounted) {
+        AppToast.error(context, 'Could not open the shared product.');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrowseScreen._openPendingDeepLink] Failed: $e');
+      }
+      pendingProductDeepLinkNotifier.value = null;
+      if (mounted) {
+        AppToast.error(context, 'Could not open the shared product.');
+      }
+    } finally {
+      _isOpeningDeepLink = false;
+    }
+  }
+
+  void _pushProductDetails({
+    required int listingId,
+    required String productTitle,
+    required String productDescription,
+    required int price,
+    required String? imageUrl,
+    required String vendorName,
+    required String vendorLocation,
+    required String? vendorAvatar,
+    required int? ownerUserIdHint,
+    required bool initiallyBookmarked,
+  }) {
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsScreen(
+          listingId: listingId,
+          productTitle: productTitle,
+          productDescription: productDescription,
+          price: price,
+          imageUrl: imageUrl,
+          vendorName: vendorName,
+          vendorLocation: vendorLocation,
+          vendorAvatar: vendorAvatar,
+          initiallyBookmarked: initiallyBookmarked,
+          ownerUserIdHint: ownerUserIdHint,
+        ),
+      ),
+    );
   }
 
   String _timeAgo(DateTime dt) {
@@ -422,16 +549,19 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   void _shareProduct() async {
-    final String shareText =
-        '''
-${widget.productTitle}
-UGX ${widget.price}
-📍 ${widget.location}
-
-Check out this item on Tukwatagane!
-
-🔗 tukwatagane://product/${widget.productId}
-    ''';
+    final deepLink = Uri(
+      scheme: 'tukwatagane',
+      host: 'product',
+      path: '/${widget.productId}',
+    ).toString();
+    final shareText = [
+      widget.productTitle,
+      'UGX ${widget.price}',
+      'Location: ${widget.location}',
+      '',
+      'Open in Tukwatagane:',
+      deepLink,
+    ].join('\n');
 
     try {
       await Share.share(shareText, subject: widget.productTitle);
@@ -599,7 +729,9 @@ Check out this item on Tukwatagane!
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.of(context).darkGray.withValues(alpha: 0.8),
+                          color: AppColors.of(
+                            context,
+                          ).darkGray.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

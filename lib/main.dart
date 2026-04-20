@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -22,7 +24,12 @@ final ValueNotifier<int> conversationUpdateNotifier = ValueNotifier(0);
 final ValueNotifier<int> bookmarkUpdateNotifier = ValueNotifier(0);
 final ValueNotifier<int?> openConversationNotifier = ValueNotifier<int?>(null);
 final ValueNotifier<int> conversationReadStateNotifier = ValueNotifier(0);
-final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
+final ValueNotifier<int?> pendingProductDeepLinkNotifier = ValueNotifier<int?>(
+  null,
+);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  ThemeMode.light,
+);
 
 /// Per-conversation last-visit timestamp. Seeded on first chat-list load.
 /// Updated whenever the user opens an inbox screen.
@@ -127,8 +134,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
 }
 
 class AppColors {
-  static AppThemeColors of(BuildContext context) =>
-      AppThemeColors.of(context);
+  static AppThemeColors of(BuildContext context) => AppThemeColors.of(context);
 }
 
 class MainApp extends StatefulWidget {
@@ -178,6 +184,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
   Timer? _unreadPollTimer;
   Timer? _popupDismissTimer;
+  StreamSubscription<Uri>? _deepLinkSubscription;
   bool _pollingUnread = false;
   int? _lastUnreadCount;
   OverlayEntry? _messagePopupEntry;
@@ -188,6 +195,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _lastUnreadCount = unreadNotifier.value;
     incomingMessageNotifierListener();
+    _startDeepLinkHandling();
     _pollUnreadAndNotify();
     _unreadPollTimer = Timer.periodic(
       _pollInterval,
@@ -201,6 +209,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     messageRealtimeService.incomingMessageNotifier.removeListener(
       _handleIncomingMessageNotification,
     );
+    _deepLinkSubscription?.cancel();
     _popupDismissTimer?.cancel();
     _removeMessagePopup();
     messageRealtimeService.stop();
@@ -215,11 +224,73 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     unawaited(messageRealtimeService.start());
   }
 
+  Future<void> _startDeepLinkHandling() async {
+    final appLinks = AppLinks();
+
+    try {
+      final initialUri = await appLinks.getInitialLink();
+      if (initialUri != null) {
+        await _handleDeepLinkUri(initialUri);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MainApp._startDeepLinkHandling] Initial link failed: $e');
+      }
+    }
+
+    _deepLinkSubscription = appLinks.uriLinkStream.listen(
+      (uri) => unawaited(_handleDeepLinkUri(uri)),
+      onError: (Object error) {
+        if (kDebugMode) {
+          debugPrint('[MainApp._startDeepLinkHandling] Stream failed: $error');
+        }
+      },
+    );
+  }
+
+  Future<void> _handleDeepLinkUri(Uri uri) async {
+    final listingId = _extractProductListingId(uri);
+    if (listingId == null) return;
+
+    pendingProductDeepLinkNotifier.value = listingId;
+
+    final loggedIn = await authService.isLoggedIn();
+    if (!loggedIn || !mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      appNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const BrowseScreen()),
+        (route) => false,
+      );
+    });
+  }
+
+  int? _extractProductListingId(Uri uri) {
+    if (uri.scheme.toLowerCase() != 'tukwatagane') return null;
+
+    final pathSegments = uri.pathSegments
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+
+    if (uri.host == 'product' && pathSegments.isNotEmpty) {
+      return int.tryParse(pathSegments.first);
+    }
+
+    if (pathSegments.length >= 2 && pathSegments.first == 'product') {
+      return int.tryParse(pathSegments[1]);
+    }
+
+    return null;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(messageRealtimeService.start());
-      unawaited(messageRealtimeService.refreshSubscriptions(forceResubscribe: true));
+      unawaited(
+        messageRealtimeService.refreshSubscriptions(forceResubscribe: true),
+      );
       unawaited(_pollUnreadAndNotify());
     }
   }
