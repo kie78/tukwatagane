@@ -236,7 +236,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.of(context).lightGray, width: 3),
+                      border: Border.all(
+                        color: AppColors.of(context).lightGray,
+                        width: 3,
+                      ),
                     ),
                     child: CircleAvatar(
                       radius: 58,
@@ -308,7 +311,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   SizedBox(height: 4),
                   Text(
                     'Student Member',
-                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 16),
+                    style: TextStyle(
+                      color: AppColors.of(context).mediumGray,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -329,7 +335,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       fontSize: 18,
                     ),
                   ),
-                  SizedBox(height: 16),
                   SizedBox(height: 16),
                   // Personal Information Card
                   Container(
@@ -355,6 +360,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             label: 'NAME',
                             value: _profile?.fullName ?? '—',
                             prefixIcon: Icons.person,
+                          ),
+                          SizedBox(height: 12),
+                          // REG NO Field
+                          _buildLockedField(
+                            label: 'REG NO',
+                            value: _profile?.registrationNumber ?? '—',
+                            prefixIcon: Icons.badge,
                           ),
                           SizedBox(height: 12),
                           // TEL Field
@@ -417,15 +429,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           child: Row(
             children: [
-              Icon(prefixIcon, color: AppColors.of(context).mediumGray, size: 20),
+              Icon(
+                prefixIcon,
+                color: AppColors.of(context).mediumGray,
+                size: 20,
+              ),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
                   value,
-                  style: TextStyle(color: AppColors.of(context).darkGray, fontSize: 15),
+                  style: TextStyle(
+                    color: AppColors.of(context).darkGray,
+                    fontSize: 15,
+                  ),
                 ),
               ),
-              Icon(Icons.lock, color: AppColors.of(context).mediumGray, size: 18),
+              Icon(
+                Icons.lock,
+                color: AppColors.of(context).mediumGray,
+                size: 18,
+              ),
             ],
           ),
         ),

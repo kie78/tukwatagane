@@ -21,13 +21,16 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _regNumberController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
   bool _fullNameTouched = false;
+  bool _regNumberTouched = false;
   bool _emailTouched = false;
   bool _phoneTouched = false;
   String? _fullNameError;
+  String? _regNumberError;
   String? _emailError;
   String? _phoneError;
 
@@ -44,6 +47,7 @@ class _SignupScreenState extends State<SignupScreen> {
   void initState() {
     super.initState();
     _fullNameController.addListener(_onFullNameChanged);
+    _regNumberController.addListener(_onRegNumberChanged);
     _emailController.addListener(_onEmailChanged);
     _phoneController.addListener(_onPhoneChanged);
     _phoneFocusNode.addListener(() => setState(() {}));
@@ -54,6 +58,15 @@ class _SignupScreenState extends State<SignupScreen> {
       _fullNameTouched = true;
       _fullNameError = SignupValidators.validateFullName(
         _fullNameController.text,
+      );
+    });
+  }
+
+  void _onRegNumberChanged() {
+    setState(() {
+      _regNumberTouched = true;
+      _regNumberError = SignupValidators.validateRegistrationNumber(
+        _regNumberController.text,
       );
     });
   }
@@ -77,28 +90,44 @@ class _SignupScreenState extends State<SignupScreen> {
   bool get _canSubmitForm {
     final fullNameValid =
         SignupValidators.validateFullName(_fullNameController.text) == null;
+    final regNumberValid =
+        SignupValidators.validateRegistrationNumber(
+          _regNumberController.text,
+        ) ==
+        null;
     final emailValid =
         SignupValidators.validateUniversityEmail(_emailController.text) == null;
-    final phoneValid = SignupValidators.validatePhone(_phoneController.text) == null;
-    return fullNameValid && emailValid && phoneValid;
+    final phoneValid =
+        SignupValidators.validatePhone(_phoneController.text) == null;
+    return fullNameValid && regNumberValid && emailValid && phoneValid;
   }
 
   void _validateAllVisibleFields() {
     _fullNameTouched = true;
+    _regNumberTouched = true;
     _emailTouched = true;
     _phoneTouched = true;
-    _fullNameError = SignupValidators.validateFullName(_fullNameController.text);
-    _emailError = SignupValidators.validateUniversityEmail(_emailController.text);
+    _fullNameError = SignupValidators.validateFullName(
+      _fullNameController.text,
+    );
+    _regNumberError = SignupValidators.validateRegistrationNumber(
+      _regNumberController.text,
+    );
+    _emailError = SignupValidators.validateUniversityEmail(
+      _emailController.text,
+    );
     _phoneError = SignupValidators.validatePhone(_phoneController.text);
   }
 
   @override
   void dispose() {
     _fullNameController.removeListener(_onFullNameChanged);
+    _regNumberController.removeListener(_onRegNumberChanged);
     _emailController.removeListener(_onEmailChanged);
     _phoneController.removeListener(_onPhoneChanged);
     _phoneFocusNode.dispose();
     _fullNameController.dispose();
+    _regNumberController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -189,8 +218,9 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _submit() async {
     final fullName = _fullNameController.text.trim();
+    final regNumber = _regNumberController.text.trim();
     final email = _emailController.text.trim();
-final phone = '+256${_phoneController.text.trim()}';
+    final phone = '+256${_phoneController.text.trim()}';
 
     setState(_validateAllVisibleFields);
     if (!_canSubmitForm) {
@@ -210,6 +240,7 @@ final phone = '+256${_phoneController.text.trim()}';
     try {
       final body = <String, dynamic>{
         'fullName': fullName,
+        'registrationNumber': regNumber,
         'email': email,
         'phoneNumber': phone,
         'campus': 'main',
@@ -277,7 +308,9 @@ final phone = '+256${_phoneController.text.trim()}';
                           color: AppColors.of(context).lightGray,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.of(context).mediumGray.withValues(alpha: 0.3),
+                            color: AppColors.of(
+                              context,
+                            ).mediumGray.withValues(alpha: 0.3),
                             width: 1,
                           ),
                         ),
@@ -303,7 +336,10 @@ final phone = '+256${_phoneController.text.trim()}';
                 // Subtext
                 Text(
                   'Join our student marketplace to start trading.',
-                  style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 16),
+                  style: TextStyle(
+                    color: AppColors.of(context).mediumGray,
+                    fontSize: 16,
+                  ),
                 ),
                 SizedBox(height: 24),
                 // Stepper
@@ -317,6 +353,16 @@ final phone = '+256${_phoneController.text.trim()}';
                   icon: Icons.person_outline,
                   errorText: _fullNameTouched ? _fullNameError : null,
                   keyboardType: TextInputType.name,
+                ),
+                SizedBox(height: 20),
+                // Registration Number Field
+                _buildInputField(
+                  label: 'Registration Number',
+                  controller: _regNumberController,
+                  hintText: '2023/BIT/1234U',
+                  icon: Icons.badge_outlined,
+                  errorText: _regNumberTouched ? _regNumberError : null,
+                  keyboardType: TextInputType.text,
                 ),
                 SizedBox(height: 20),
                 // University Email Field
@@ -416,8 +462,8 @@ final phone = '+256${_phoneController.text.trim()}';
     final borderColor = hasError
         ? AppColors.of(context).darkGray
         : isFocused
-            ? AppColors.of(context).primary
-            : AppColors.of(context).lightGray;
+        ? AppColors.of(context).primary
+        : AppColors.of(context).lightGray;
     final borderWidth = (hasError || isFocused) ? 2.0 : 1.0;
 
     return Column(
@@ -442,7 +488,10 @@ final phone = '+256${_phoneController.text.trim()}';
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 child: Text(
                   '+256',
                   style: TextStyle(
@@ -452,7 +501,11 @@ final phone = '+256${_phoneController.text.trim()}';
                   ),
                 ),
               ),
-              Container(width: 1, height: 24, color: AppColors.of(context).lightGray),
+              Container(
+                width: 1,
+                height: 24,
+                color: AppColors.of(context).lightGray,
+              ),
               Expanded(
                 child: TextField(
                   controller: _phoneController,
@@ -461,12 +514,20 @@ final phone = '+256${_phoneController.text.trim()}';
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
                     hintText: '700 000 000',
-                    hintStyle: TextStyle(color: AppColors.of(context).mediumGray),
-                    suffixIcon: Icon(Icons.phone_outlined, color: AppColors.of(context).mediumGray),
+                    hintStyle: TextStyle(
+                      color: AppColors.of(context).mediumGray,
+                    ),
+                    suffixIcon: Icon(
+                      Icons.phone_outlined,
+                      color: AppColors.of(context).mediumGray,
+                    ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                   ),
                 ),
               ),
@@ -479,7 +540,10 @@ final phone = '+256${_phoneController.text.trim()}';
             padding: const EdgeInsets.only(left: 12),
             child: Text(
               _phoneError!,
-              style: TextStyle(color: AppColors.of(context).darkGray, fontSize: 12),
+              style: TextStyle(
+                color: AppColors.of(context).darkGray,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -522,26 +586,39 @@ final phone = '+256${_phoneController.text.trim()}';
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: hasError ? AppColors.of(context).darkGray : AppColors.of(context).lightGray,
+                color: hasError
+                    ? AppColors.of(context).darkGray
+                    : AppColors.of(context).lightGray,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: hasError ? AppColors.of(context).darkGray : AppColors.of(context).lightGray,
+                color: hasError
+                    ? AppColors.of(context).darkGray
+                    : AppColors.of(context).lightGray,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.of(context).primary, width: 2),
+              borderSide: BorderSide(
+                color: AppColors.of(context).primary,
+                width: 2,
+              ),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.of(context).darkGray, width: 2),
+              borderSide: BorderSide(
+                color: AppColors.of(context).darkGray,
+                width: 2,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.of(context).darkGray, width: 2),
+              borderSide: BorderSide(
+                color: AppColors.of(context).darkGray,
+                width: 2,
+              ),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -563,7 +640,9 @@ final phone = '+256${_phoneController.text.trim()}';
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 0 ? AppColors.of(context).primary : AppColors.of(context).white,
+                  color: currentStep >= 0
+                      ? AppColors.of(context).primary
+                      : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 0
@@ -602,7 +681,9 @@ final phone = '+256${_phoneController.text.trim()}';
         Expanded(
           child: Container(
             height: 2,
-            color: currentStep >= 1 ? AppColors.of(context).primary : AppColors.of(context).white,
+            color: currentStep >= 1
+                ? AppColors.of(context).primary
+                : AppColors.of(context).white,
           ),
         ),
         Expanded(
@@ -612,7 +693,9 @@ final phone = '+256${_phoneController.text.trim()}';
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 1 ? AppColors.of(context).primary : AppColors.of(context).white,
+                  color: currentStep >= 1
+                      ? AppColors.of(context).primary
+                      : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 1
@@ -651,7 +734,9 @@ final phone = '+256${_phoneController.text.trim()}';
         Expanded(
           child: Container(
             height: 2,
-            color: currentStep >= 2 ? AppColors.of(context).primary : AppColors.of(context).white,
+            color: currentStep >= 2
+                ? AppColors.of(context).primary
+                : AppColors.of(context).white,
           ),
         ),
         Expanded(
@@ -661,7 +746,9 @@ final phone = '+256${_phoneController.text.trim()}';
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: currentStep >= 2 ? AppColors.of(context).primary : AppColors.of(context).white,
+                  color: currentStep >= 2
+                      ? AppColors.of(context).primary
+                      : AppColors.of(context).white,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: currentStep >= 2
@@ -733,7 +820,10 @@ final phone = '+256${_phoneController.text.trim()}';
               Expanded(
                 child: Text(
                   'Use current location',
-                  style: TextStyle(color: AppColors.of(context).darkGray, fontSize: 14),
+                  style: TextStyle(
+                    color: AppColors.of(context).darkGray,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               if (_isLoadingLocation)
@@ -742,7 +832,9 @@ final phone = '+256${_phoneController.text.trim()}';
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.of(context).primary),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.of(context).primary,
+                    ),
                   ),
                 )
               else
@@ -772,11 +864,17 @@ final phone = '+256${_phoneController.text.trim()}';
             decoration: BoxDecoration(
               color: AppColors.of(context).primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.of(context).primary.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: AppColors.of(context).primary.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                Icon(Icons.location_on, color: AppColors.of(context).primary, size: 16),
+                Icon(
+                  Icons.location_on,
+                  color: AppColors.of(context).primary,
+                  size: 16,
+                ),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -836,7 +934,10 @@ final phone = '+256${_phoneController.text.trim()}';
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.of(context).primary, width: 2),
+              borderSide: BorderSide(
+                color: AppColors.of(context).primary,
+                width: 2,
+              ),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
