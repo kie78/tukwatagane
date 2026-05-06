@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
 import 'main.dart';
@@ -478,6 +480,8 @@ class ProductCard extends StatefulWidget {
 class _ProductCardState extends State<ProductCard> {
   bool _isBookmarked = false;
   bool _isBookmarkLoading = false;
+  bool _isMessageLoading = false;
+  bool _isSharing = false;
   int? _myUserId;
 
   @override
@@ -548,7 +552,38 @@ class _ProductCardState extends State<ProductCard> {
     }
   }
 
+  Future<XFile?> _buildShareImageFile() async {
+    final imageUrl = widget.imageUrl?.trim();
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+
+    try {
+      final response = await apiClient.dio.get<List<int>>(
+        imageUrl,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty) return null;
+
+      final uri = Uri.tryParse(imageUrl);
+      final rawName = uri?.pathSegments.isNotEmpty == true
+          ? uri!.pathSegments.last
+          : 'listing_${widget.listingId}.jpg';
+      final sanitizedName = rawName.contains('.') ? rawName : '$rawName.jpg';
+      final file = File('${Directory.systemTemp.path}/$sanitizedName');
+      await file.writeAsBytes(bytes, flush: true);
+      return XFile(file.path);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProductCard._buildShareImageFile] Failed: $e');
+      }
+      return null;
+    }
+  }
+
   void _shareProduct() async {
+    if (_isSharing) return;
+
+    setState(() => _isSharing = true);
     final deepLink = Uri(
       scheme: 'tukwatagane',
       host: 'product',
@@ -557,6 +592,7 @@ class _ProductCardState extends State<ProductCard> {
     final shareText = [
       widget.productTitle,
       'UGX ${widget.price}',
+      'Vendor: ${widget.sellerName}',
       'Location: ${widget.location}',
       '',
       'Open in Tukwatagane:',
@@ -564,11 +600,71 @@ class _ProductCardState extends State<ProductCard> {
     ].join('\n');
 
     try {
-      await Share.share(shareText, subject: widget.productTitle);
+      final shareImage = await _buildShareImageFile();
+      if (shareImage != null) {
+        await Share.shareXFiles(
+          [shareImage],
+          text: shareText,
+          subject: widget.productTitle,
+        );
+      } else {
+        await Share.share(shareText, subject: widget.productTitle);
+      }
     } catch (e) {
       if (mounted) {
         AppToast.error(context, 'Error sharing: $e');
       }
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
+
+  Future<void> _openConversation() async {
+    if (_isMessageLoading) return;
+
+    setState(() => _isMessageLoading = true);
+    try {
+      final openResult = await conversationService.getOrCreateConversation(
+        listingId: widget.listingId,
+        sellerUserId: widget.ownerUserId,
+      );
+      final profile = await publicProfileCache.resolvePublicProfile(
+        openResult.counterpartUserId,
+      );
+      final sellerPhone = profile?.phoneNumber;
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => InboxScreen(
+            conversationId: openResult.conversationId,
+            userName: widget.sellerName,
+            avatarUrl: widget.sellerAvatar,
+            isOnline: false,
+            phoneNumber: sellerPhone,
+            counterpartUserId:
+                widget.ownerUserId ?? openResult.counterpartUserId,
+            productTitle: widget.productTitle,
+            productImage: widget.imageUrl,
+            productPrice: int.parse(widget.price.replaceAll(',', '')),
+            productListingId: widget.listingId,
+            armProductReferenceOnOpen: true,
+          ),
+        ),
+      );
+    } on ConversationOpenException catch (e) {
+      if (mounted) {
+        AppToast.error(context, e.message);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProductCard._openConversation] Failed: $e');
+      }
+      if (mounted) {
+        AppToast.error(context, 'Could not open chat. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isMessageLoading = false);
     }
   }
 
@@ -795,55 +891,23 @@ class _ProductCardState extends State<ProductCard> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () async {
-                              try {
-                                final openResult = await conversationService
-                                    .getOrCreateConversation(
-                                      listingId: widget.listingId,
-                                      sellerUserId: widget.ownerUserId,
-                                    );
-                                String? sellerPhone;
-                                final profile = await publicProfileCache
-                                    .resolvePublicProfile(
-                                      openResult.counterpartUserId,
-                                    );
-                                sellerPhone = profile?.phoneNumber;
-                                if (!context.mounted) return;
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => InboxScreen(
-                                      conversationId: openResult.conversationId,
-                                      userName: widget.sellerName,
-                                      avatarUrl: widget.sellerAvatar,
-                                      isOnline: false,
-                                      phoneNumber: sellerPhone,
-                                      counterpartUserId:
-                                          widget.ownerUserId ??
-                                          openResult.counterpartUserId,
-                                      productTitle: widget.productTitle,
-                                      productImage: widget.imageUrl,
-                                      productPrice: int.parse(
-                                        widget.price.replaceAll(',', ''),
-                                      ),
-                                      productListingId: widget.listingId,
-                                      armProductReferenceOnOpen: true,
+                            onPressed: _isMessageLoading
+                                ? null
+                                : _openConversation,
+                            icon: _isMessageLoading
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      color: AppColors.of(context).white,
+                                      strokeWidth: 2,
                                     ),
+                                  )
+                                : Icon(
+                                    Icons.message,
+                                    size: 18,
+                                    color: AppColors.of(context).white,
                                   ),
-                                );
-                              } catch (e) {
-                                if (kDebugMode) {
-                                  debugPrint(
-                                    '[ProductCard.onMessageTap] Failed: $e',
-                                  );
-                                }
-                              }
-                            },
-                            icon: Icon(
-                              Icons.message,
-                              size: 18,
-                              color: AppColors.of(context).white,
-                            ),
                             label: Text('Message'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.of(context).primary,

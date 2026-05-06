@@ -6,6 +6,7 @@ import 'core/api_client.dart';
 import 'core/auth_service.dart';
 import 'core/conversation_service.dart';
 import 'core/public_profile_cache.dart';
+import 'core/ui/app_toast.dart';
 import 'widgets/skeletons.dart';
 import 'models/models.dart';
 import 'config/campus_zones.dart';
@@ -465,7 +466,10 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         leading: IconButton(
           icon: CircleAvatar(
             backgroundColor: AppColors.of(context).lightGray,
-            child: Icon(Icons.arrow_back, color: AppColors.of(context).darkGray),
+            child: Icon(
+              Icons.arrow_back,
+              color: AppColors.of(context).darkGray,
+            ),
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -603,7 +607,9 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Text(
                           'No active listings',
-                          style: TextStyle(color: AppColors.of(context).mediumGray),
+                          style: TextStyle(
+                            color: AppColors.of(context).mediumGray,
+                          ),
                         ),
                       ),
                     )
@@ -655,7 +661,16 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                           ),
                         ),
                       );
-                    } catch (_) {}
+                    } on ConversationOpenException catch (e) {
+                      if (!context.mounted) return;
+                      AppToast.error(context, e.message);
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      AppToast.error(
+                        context,
+                        'Could not open chat. Please try again.',
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.of(context).primary,
@@ -710,7 +725,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               color: AppColors.of(context).lightGray,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: AppColors.of(context).mediumGray, size: 24),
+            child: Icon(
+              icon,
+              color: AppColors.of(context).mediumGray,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -728,7 +747,10 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 13),
+                  style: TextStyle(
+                    color: AppColors.of(context).mediumGray,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -740,7 +762,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 color: AppColors.of(context).primary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.check, color: AppColors.of(context).white, size: 16),
+              child: Icon(
+                Icons.check,
+                color: AppColors.of(context).white,
+                size: 16,
+              ),
             ),
         ],
       ),

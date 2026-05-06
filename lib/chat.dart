@@ -20,6 +20,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with RouteAware {
+  List<ConversationListItem> _conversationItems = [];
   List<_ConversationGroup> _groups = [];
   Map<int, String?> _counterpartAvatars = {};
   bool _isLoading = true;
@@ -44,7 +45,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
 
   void _onRealtimeStateChanged() {
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _groups = _groupConversations(_conversationItems);
+      });
     }
   }
 
@@ -97,6 +100,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       );
       if (mounted) {
         setState(() {
+          _conversationItems = items;
           _groups = _groupConversations(items);
           _counterpartAvatars = avatarMap;
         });
@@ -106,10 +110,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
           unreadService
               .refreshUnreadCount(fallbackCount: fallback)
               .then((count) {
-            if (mounted) {
-              messageRealtimeService.setServerUnreadCount(count);
-            }
-          }).catchError((_) {}),
+                if (mounted) {
+                  messageRealtimeService.setServerUnreadCount(count);
+                }
+              })
+              .catchError((_) {}),
         );
         unawaited(messageRealtimeService.refreshSubscriptions());
       }
@@ -284,10 +289,7 @@ class _GroupedChatTile extends StatelessWidget {
   final _ConversationGroup group;
   final String? avatarUrl;
 
-  const _GroupedChatTile({
-    required this.group,
-    this.avatarUrl,
-  });
+  const _GroupedChatTile({required this.group, this.avatarUrl});
 
   String _timeAgo(DateTime? dt) {
     if (dt == null) return '';
@@ -320,23 +322,7 @@ class _GroupedChatTile extends StatelessWidget {
   }
 
   void _onTap(BuildContext context) {
-    if (group.conversations.length == 1) {
-      _openConversation(context, group.conversations.first);
-    } else {
-      showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (_) => _ThreadPickerSheet(
-          group: group,
-          onSelect: (conv) {
-            Navigator.pop(context);
-            _openConversation(context, conv);
-          },
-        ),
-      );
-    }
+    _openConversation(context, group.mostRecent);
   }
 
   @override
@@ -348,20 +334,17 @@ class _GroupedChatTile extends StatelessWidget {
         ? avatarUrl
         : null;
     final hasUnread =
-      messageRealtimeService.unreadConversationIdsNotifier.value.any(
-        (id) => group.conversations.any((c) => c.id == id),
-      ) ||
-      group.conversations.any((conv) {
-      final visitedAt = conversationVisitedAt[conv.id];
-      final live = messageRealtimeService.latestMessagesNotifier.value[conv.id];
-      final messageAt = live?.createdAt ?? conv.lastMessageAt;
-      return messageAt != null &&
-        (visitedAt == null || messageAt.isAfter(visitedAt));
-    });
-    final subtitle = group.conversations.length > 1
-        ? '${group.conversations.length} active threads'
-        : group.mostRecent.listingTitle;
-
+        messageRealtimeService.unreadConversationIdsNotifier.value.any(
+          (id) => group.conversations.any((c) => c.id == id),
+        ) ||
+        group.conversations.any((conv) {
+          final visitedAt = conversationVisitedAt[conv.id];
+          final live =
+              messageRealtimeService.latestMessagesNotifier.value[conv.id];
+          final messageAt = live?.createdAt ?? conv.lastMessageAt;
+          return messageAt != null &&
+              (visitedAt == null || messageAt.isAfter(visitedAt));
+        });
     return InkWell(
       onTap: () => _onTap(context),
       borderRadius: BorderRadius.circular(12),
@@ -403,16 +386,6 @@ class _GroupedChatTile extends StatelessWidget {
                       fontWeight: hasUnread ? FontWeight.w900 : FontWeight.bold,
                       fontSize: 16,
                     ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.of(context).mediumGray,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   if (group.effectiveLastMessageBody != null) ...[
                     SizedBox(height: 2),
@@ -461,113 +434,6 @@ class _GroupedChatTile extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ThreadPickerSheet extends StatelessWidget {
-  final _ConversationGroup group;
-  final void Function(ConversationListItem) onSelect;
-
-  const _ThreadPickerSheet({required this.group, required this.onSelect});
-
-  String _timeAgo(DateTime? dt) {
-    if (dt == null) return '';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(height: 12),
-        Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.of(context).mediumGray,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'Conversations with ${group.counterpartFullName}',
-            style: TextStyle(
-              color: AppColors.of(context).darkGray,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        SizedBox(height: 8),
-        ...group.conversations.map(
-          (conv) => ListTile(
-            leading: Icon(
-              Icons.chat_bubble_outline,
-              color: conv.unreadCount > 0
-                  ? AppColors.of(context).primary
-                  : AppColors.of(context).mediumGray,
-            ),
-            title: Text(
-              conv.listingTitle,
-              style: TextStyle(
-                color: AppColors.of(context).darkGray,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            subtitle: conv.lastMessageBody != null
-                ? Text(
-                    conv.lastMessageBody!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: AppColors.of(context).mediumGray),
-                  )
-                : null,
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _timeAgo(conv.lastMessageAt),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.of(context).mediumGray,
-                  ),
-                ),
-                if (conv.unreadCount > 0) ...[
-                  SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.all(Radius.circular(10)),
-                    ),
-                    child: Text(
-                      conv.unreadCount > 99 ? '99+' : '${conv.unreadCount}',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            onTap: () => onSelect(conv),
-          ),
-        ),
-        SizedBox(height: 16),
-      ],
     );
   }
 }

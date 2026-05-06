@@ -318,7 +318,15 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
           ),
         ),
       );
-    } catch (_) {}
+    } on ConversationOpenException catch (e) {
+      if (mounted) {
+        AppToast.error(context, e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        AppToast.error(context, 'Could not open chat. Please try again.');
+      }
+    }
   }
 
   @override
@@ -415,7 +423,9 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                         Icon(
                           Icons.bookmark_border,
                           size: 80,
-                          color: AppColors.of(context).mediumGray.withValues(alpha: 0.5),
+                          color: AppColors.of(
+                            context,
+                          ).mediumGray.withValues(alpha: 0.5),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -624,7 +634,10 @@ class _SavedScreenState extends State<SavedScreen> with RouteAware {
                       onPressed: () => _confirmRemoveItem(item),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.of(context).mediumGray,
-                        side: BorderSide(color: AppColors.of(context).lightGray, width: 1),
+                        side: BorderSide(
+                          color: AppColors.of(context).lightGray,
+                          width: 1,
+                        ),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 8,

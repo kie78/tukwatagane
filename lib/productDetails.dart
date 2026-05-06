@@ -346,8 +346,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
         );
       }
+    } on ConversationOpenException catch (e) {
+      if (mounted) {
+        AppToast.error(context, e.message);
+      }
     } catch (_) {
-      // Fallback: open with a dummy conversationId of 0 (will fail to load msgs gracefully)
       if (mounted) {
         AppToast.error(context, 'Could not open chat. Please try again.');
       }
@@ -631,7 +634,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                         color: AppColors.of(context).white,
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: AppColors.of(context).lightGray,
+                                          color: AppColors.of(
+                                            context,
+                                          ).lightGray,
                                           width: 1,
                                         ),
                                       ),
@@ -648,8 +653,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                   ? Icons.bookmark
                                                   : Icons.bookmark_border,
                                               color: _isBookmarked
-                                                  ? AppColors.of(context).primary
-                                                  : AppColors.of(context).mediumGray,
+                                                  ? AppColors.of(
+                                                      context,
+                                                    ).primary
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).mediumGray,
                                               size: 24,
                                             ),
                                     ),
@@ -697,15 +706,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               )
                                             : CircleAvatar(
                                                 radius: 28,
-                                                backgroundColor:
-                                                    AppColors.of(context).darkGray,
+                                                backgroundColor: AppColors.of(
+                                                  context,
+                                                ).darkGray,
                                                 child: Text(
                                                   widget.vendorName.isNotEmpty
                                                       ? widget.vendorName[0]
                                                             .toUpperCase()
                                                       : '?',
                                                   style: TextStyle(
-                                                    color: AppColors.of(context).white,
+                                                    color: AppColors.of(
+                                                      context,
+                                                    ).white,
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 18,
                                                   ),
@@ -718,7 +730,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             child: Container(
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
-                                                color: AppColors.of(context).white,
+                                                color: AppColors.of(
+                                                  context,
+                                                ).white,
                                                 shape: BoxShape.circle,
                                               ),
                                               child: Icon(
@@ -740,7 +754,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           Text(
                                             widget.vendorName,
                                             style: TextStyle(
-                                              color: AppColors.of(context).darkGray,
+                                              color: AppColors.of(
+                                                context,
+                                              ).darkGray,
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -751,13 +767,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               Icon(
                                                 Icons.location_on,
                                                 size: 14,
-                                                color: AppColors.of(context).mediumGray,
+                                                color: AppColors.of(
+                                                  context,
+                                                ).mediumGray,
                                               ),
                                               SizedBox(width: 4),
                                               Text(
                                                 widget.vendorLocation,
                                                 style: TextStyle(
-                                                  color: AppColors.of(context).mediumGray,
+                                                  color: AppColors.of(
+                                                    context,
+                                                  ).mediumGray,
                                                   fontSize: 13,
                                                 ),
                                               ),
@@ -790,7 +810,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             Text(
                                               widget.vendorRating!.toString(),
                                               style: TextStyle(
-                                                color: AppColors.of(context).primary,
+                                                color: AppColors.of(
+                                                  context,
+                                                ).primary,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold,
                                               ),

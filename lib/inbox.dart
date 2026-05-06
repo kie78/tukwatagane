@@ -12,6 +12,7 @@ import 'core/avatar_resolver.dart';
 import 'core/auth_service.dart';
 import 'core/api_exception.dart';
 import 'core/message_realtime_service.dart';
+import 'core/public_profile_cache.dart';
 import 'core/stomp_service.dart';
 import 'core/unread_service.dart';
 import 'core/ui/app_toast.dart';
@@ -83,11 +84,39 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   Timer? _unreadRefreshDebounce;
 
   String? _resolvedAvatarUrl;
+  String? _resolvedPhoneNumber;
+
+  String get _displayInitials {
+    final provided = widget.initials?.trim();
+    if (provided != null && provided.isNotEmpty) {
+      return provided.toUpperCase();
+    }
+
+    final parts = widget.userName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      return parts.first.characters.first.toUpperCase();
+    }
+    return (parts.first.characters.first + parts.last.characters.first)
+        .toUpperCase();
+  }
 
   String? get _effectiveAvatarUrl {
     final resolved = _resolvedAvatarUrl?.trim();
     if (resolved != null && resolved.isNotEmpty) return resolved;
     final provided = widget.avatarUrl?.trim();
+    if (provided != null && provided.isNotEmpty) return provided;
+    return null;
+  }
+
+  String? get _effectivePhoneNumber {
+    final resolved = _resolvedPhoneNumber?.trim();
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final provided = widget.phoneNumber?.trim();
     if (provided != null && provided.isNotEmpty) return provided;
     return null;
   }
@@ -101,15 +130,17 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     conversationVisitedAt[widget.conversationId] = DateTime.now();
     conversationReadStateNotifier.value++;
     messageRealtimeService.markConversationRead(widget.conversationId);
-    _pendingReferencedListingId =
-      widget.armProductReferenceOnOpen ? widget.productListingId : null;
+    _pendingReferencedListingId = widget.armProductReferenceOnOpen
+        ? widget.productListingId
+        : null;
     _resolvedAvatarUrl = widget.avatarUrl;
+    _resolvedPhoneNumber = widget.phoneNumber;
     _init();
   }
 
   Future<void> _init() async {
     _myUserId = await authService.getUserId();
-    await _loadCounterpartAvatar();
+    await _loadCounterpartContact();
     _seedInitialReferencedListingPreview();
     await _loadMessages();
     await _markAsReadAndRefreshUnread();
@@ -137,7 +168,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     }
 
     final preview = _referencedListingPreviews[listingId];
-    final needsBackfill = preview == null ||
+    final needsBackfill =
+        preview == null ||
         preview.title.trim().isEmpty ||
         preview.imageUrl == null ||
         preview.imageUrl!.trim().isEmpty ||
@@ -193,17 +225,42 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     });
   }
 
-  Future<void> _loadCounterpartAvatar() async {
+  Future<void> _loadCounterpartContact() async {
+    final existingPhone = _resolvedPhoneNumber?.trim();
     final existingAvatar = _resolvedAvatarUrl?.trim();
-    if (existingAvatar != null && existingAvatar.isNotEmpty) return;
+    if ((existingAvatar != null && existingAvatar.isNotEmpty) &&
+        (existingPhone != null && existingPhone.isNotEmpty)) {
+      return;
+    }
 
-    final resolved = await avatarResolver.resolveAvatarUrl(
+    final profile = await publicProfileCache.resolvePublicProfile(
       widget.counterpartUserId,
     );
     if (!mounted) return;
-    final avatar = resolved?.trim();
-    if (avatar != null && avatar.isNotEmpty) {
-      setState(() => _resolvedAvatarUrl = avatar);
+    final avatar = profile?.avatarUrl?.trim();
+    final phoneNumber = profile?.phoneNumber?.trim();
+    if ((avatar != null && avatar.isNotEmpty) ||
+        (phoneNumber != null && phoneNumber.isNotEmpty)) {
+      setState(() {
+        if (avatar != null && avatar.isNotEmpty) {
+          _resolvedAvatarUrl = avatar;
+        }
+        if (phoneNumber != null && phoneNumber.isNotEmpty) {
+          _resolvedPhoneNumber = phoneNumber;
+        }
+      });
+      return;
+    }
+
+    if (existingAvatar == null || existingAvatar.isEmpty) {
+      final resolvedAvatar = await avatarResolver.resolveAvatarUrl(
+        widget.counterpartUserId,
+      );
+      if (!mounted) return;
+      final fallbackAvatar = resolvedAvatar?.trim();
+      if (fallbackAvatar != null && fallbackAvatar.isNotEmpty) {
+        setState(() => _resolvedAvatarUrl = fallbackAvatar);
+      }
     }
   }
 
@@ -276,7 +333,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
           // Replace the matching optimistic message with the confirmed one
           setState(() {
             final idx = _messages.indexWhere(
-              (m) => m.id < 0 && m.body == msg.body,
+              (m) =>
+                  m.id < 0 &&
+                  m.body == msg.body &&
+                  m.referencedListingId == msg.referencedListingId,
             );
             if (idx >= 0) {
               _messages[idx] = msg;
@@ -319,7 +379,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   }
 
   String? get _normalizedPhoneNumber {
-    final phoneNumber = widget.phoneNumber?.trim();
+    final phoneNumber = _effectivePhoneNumber;
     if (phoneNumber == null || phoneNumber.isEmpty) return null;
     return phoneNumber.replaceAll(RegExp(r'\s+'), '');
   }
@@ -404,7 +464,11 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             'referencedListingId': referencedListingId,
         },
       );
-      _pendingReferencedListingId = null;
+      if (mounted) {
+        setState(() => _pendingReferencedListingId = null);
+      } else {
+        _pendingReferencedListingId = null;
+      }
       // STOMP will echo the confirmed message back; handled in _connectStomp
     } on DioException catch (e) {
       _pendingEchos--;
@@ -424,6 +488,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final avatarUrl = _effectiveAvatarUrl;
+    final referencedListingId = _pendingReferencedListingId;
 
     return Scaffold(
       backgroundColor: AppColors.of(context).lightGray,
@@ -470,18 +535,7 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                       ),
                     )
                   else
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: AppColors.of(context).lightGray,
-                      child: Text(
-                        widget.initials ?? '',
-                        style: TextStyle(
-                          color: AppColors.of(context).darkGray,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                    _buildLetterAvatar(radius: 20),
                 ],
               ),
             ),
@@ -558,53 +612,63 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               ],
             ),
             child: SafeArea(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Text Field
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).white,
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(
-                          color: AppColors.of(context).lightGray,
-                          width: 1,
+                  if (referencedListingId != null) ...[
+                    _buildPendingReferencedListingBanner(referencedListingId),
+                    const SizedBox(height: 12),
+                  ],
+                  Row(
+                    children: [
+                      // Text Field
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.of(context).white,
+                            borderRadius: BorderRadius.circular(25),
+                            border: Border.all(
+                              color: AppColors.of(context).lightGray,
+                              width: 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: InputDecoration(
+                              hintText: 'Enter message...',
+                              hintStyle: TextStyle(
+                                color: AppColors.of(context).mediumGray,
+                                fontSize: 14,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      child: TextField(
-                        controller: _messageController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter message...',
-                          hintStyle: TextStyle(
-                            color: AppColors.of(context).mediumGray,
-                            fontSize: 14,
+                      const SizedBox(width: 12),
+                      // Send Button
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.of(context).primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.send,
+                            color: AppColors.of(context).white,
+                            size: 18,
                           ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
+                          onPressed: _sendMessage,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Send Button
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.send,
-                        color: AppColors.of(context).white,
-                        size: 18,
-                      ),
-                      onPressed: _sendMessage,
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -631,8 +695,9 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     required bool isOutgoing,
   }) {
     return Column(
-      crossAxisAlignment:
-          isOutgoing ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isOutgoing
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         if (message.referencedListingId != null) ...[
           _buildInlineReferencedListingCard(
@@ -652,6 +717,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildLetterAvatar(radius: 16),
+        const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,15 +749,12 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
             ],
           ),
         ),
-        const SizedBox(width: 48),
+        const SizedBox(width: 24),
       ],
     );
   }
 
-  Widget _buildOutgoingMessage(
-    String message,
-    String timestamp,
-  ) {
+  Widget _buildOutgoingMessage(String message, String timestamp) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -706,7 +770,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 ),
                 child: Text(
                   message,
-                  style: TextStyle(color: AppColors.of(context).white, fontSize: 14),
+                  style: TextStyle(
+                    color: AppColors.of(context).white,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
@@ -715,7 +782,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 children: [
                   Text(
                     timestamp,
-                    style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 11),
+                    style: TextStyle(
+                      color: AppColors.of(context).mediumGray,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -752,15 +822,21 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               const SizedBox(height: 8),
               Text(
                 widget.businessName!,
-                style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 14),
+                style: TextStyle(
+                  color: AppColors.of(context).mediumGray,
+                  fontSize: 14,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
-            if (widget.phoneNumber != null) ...[
+            if (_effectivePhoneNumber != null) ...[
               const SizedBox(height: 4),
               Text(
-                widget.phoneNumber!,
-                style: TextStyle(color: AppColors.of(context).mediumGray, fontSize: 14),
+                _effectivePhoneNumber!,
+                style: TextStyle(
+                  color: AppColors.of(context).mediumGray,
+                  fontSize: 14,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -775,7 +851,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     required bool isOutgoing,
   }) {
     final preview = _referencedListingPreviews[listingId];
-    final fallbackTitle = listingId == widget.productListingId &&
+    final fallbackTitle =
+        listingId == widget.productListingId &&
             widget.productTitle != null &&
             widget.productTitle!.trim().isNotEmpty
         ? widget.productTitle!.trim()
@@ -784,7 +861,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     final title = (preview?.title.trim().isNotEmpty == true)
         ? preview!.title
         : fallbackTitle;
-    final price = preview?.price ??
+    final price =
+        preview?.price ??
         (listingId == widget.productListingId ? widget.productPrice : null);
 
     return Align(
@@ -810,7 +888,10 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
           decoration: BoxDecoration(
             color: AppColors.of(context).white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.of(context).lightGray, width: 1),
+            border: Border.all(
+              color: AppColors.of(context).lightGray,
+              width: 1,
+            ),
           ),
           child: Row(
             children: [
@@ -864,6 +945,119 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingReferencedListingBanner(int listingId) {
+    final preview = _referencedListingPreviews[listingId];
+    final fallbackTitle =
+        listingId == widget.productListingId &&
+            widget.productTitle != null &&
+            widget.productTitle!.trim().isNotEmpty
+        ? widget.productTitle!.trim()
+        : 'Loading listing...';
+    final imageUrl =
+        preview?.imageUrl ??
+        (listingId == widget.productListingId
+            ? widget.productImage?.trim()
+            : null);
+    final title = (preview?.title.trim().isNotEmpty == true)
+        ? preview!.title
+        : fallbackTitle;
+    final price =
+        preview?.price ??
+        (listingId == widget.productListingId ? widget.productPrice : null);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).lightGray,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.of(context).lightGray, width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: imageUrl != null && imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          width: 42,
+                          height: 42,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: _imagePlaceholder(),
+                          ),
+                        )
+                      : SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: _imagePlaceholder(),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.of(context).darkGray,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (price != null)
+                        Text(
+                          'UGX ${price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+                          style: TextStyle(
+                            color: AppColors.of(context).primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () {
+              setState(() => _pendingReferencedListingId = null);
+            },
+            icon: Icon(
+              Icons.close,
+              color: AppColors.of(context).mediumGray,
+              size: 18,
+            ),
+            tooltip: 'Remove product reference',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLetterAvatar({required double radius}) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.of(context).lightGray,
+      child: Text(
+        _displayInitials,
+        style: TextStyle(
+          color: AppColors.of(context).darkGray,
+          fontWeight: FontWeight.bold,
+          fontSize: radius * 0.7,
         ),
       ),
     );
