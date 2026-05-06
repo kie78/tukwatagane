@@ -590,12 +590,13 @@ class _ProductCardState extends State<ProductCard> {
       path: '/${widget.productId}',
     ).toString();
     final shareText = [
+      'Check out these listings in Tukwatagane',
+      '',
       widget.productTitle,
       'UGX ${widget.price}',
-      'Vendor: ${widget.sellerName}',
-      'Location: ${widget.location}',
+      widget.sellerName,
+      widget.location,
       '',
-      'Open in Tukwatagane:',
       deepLink,
     ].join('\n');
 
